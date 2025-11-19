@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
+# SPDX-License-Identifier: ISC
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apywire"
+version = "0.1.0"
+description = "A package to wire up objects"
+readme = "README.md"
+license = {text = "ISC"}
+authors = [{name = "Alexandre Gomes Gaigalas", email = "alganet@gmail.com"}]
+maintainers = [{name = "Alexandre Gomes Gaigalas", email = "alganet@gmail.com"}]
+keywords = ["object", "wiring", "dependency", "injection"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: ISC License (ISCL)",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = []
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/alganet/apywire"
+Repository = "https://github.com/alganet/apywire"
+Issues = "https://github.com/alganet/apywire/issues"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+    "pytest",
+    "reuse",
+    "coverage",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.black]
+line-length = 79
+
+[tool.isort]
+profile = "black"
+line_length = 79
+
+[tool.flake8]
+max-line-length = 79
+
+[tool.mypy]
+mypy_path = "."
+strict = true
+disallow_any_unimported = true
+disallow_any_decorated = true
+disallow_any_explicit = true
+disallow_subclassing_any = true
+disallow_any_expr = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

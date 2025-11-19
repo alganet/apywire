@@ -1,0 +1,11 @@
+version = 1
+
+SPDX-PackageName = "apywire"
+SPDX-PackageSupplier = "Alexandre Gomes Gaigalas <alganet@gmail.com>"
+SPDX-PackageDownloadLocation = "https://github.com/alganet/apywire"
+
+[[annotations]]
+path = "**/__pycache__/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexandre Gomes Gaigalas <alganet@gmail.com>"
+SPDX-License-Identifier = "ISC"
