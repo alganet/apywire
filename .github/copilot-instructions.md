@@ -1,6 +1,8 @@
-<!-- SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com> -->
-<!-- SPDX-License-Identifier: ISC -->
+<!--
+SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
 
+SPDX-License-Identifier: ISC
+-->
 # AI Coding Guidelines for apywire
 
 ## Overview
@@ -15,8 +17,8 @@ apywire is a Python library for object wiring with lazy loading. It provides dep
 
 ## Developer Workflows
 - **Full Check**: `make all` (format, lint, test coverage)
-- **Build & Publish**: `make build` (creates dist/), `make publish` (uploads to PyPI)
-- **Clean**: `make clean` (removes __pycache__, .coverage, etc.)
+- **Build & Publish**: `make dist` (ensures dist/), `make publish` (uploads to PyPI)
+- **Clean**: `make clean` (removes dist/, __pycache__, .coverage, etc.)
 - **Debug**: Use `pytest -xvs` for verbose test runs
 
 ## Conventions
@@ -29,7 +31,6 @@ apywire is a Python library for object wiring with lazy loading. It provides dep
 ## Examples
 - **Lazy Access**: `wired = wire(spec); obj = wired.someName` (instantiates on first access)
 - **Spec Format**: `{"module.Class name": {"param": "value"}}` (YAML/JSON-compatible structure)
-- **Generic Usage**: Functions use `[T]` for type safety without runtime generics
 - **Equivalence**: `compile(spec)` generates code that behaves identically to `wire(spec)`
 
 ## Key Files

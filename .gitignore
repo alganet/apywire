@@ -1,12 +1,19 @@
 # SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
+#
 # SPDX-License-Identifier: ISC
 
+# Project Specific
+apywire/**.c
+
+# General
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.so
 .mypy_cache/
 .pytest_cache/
 .coverage
 *.egg-info/
 dist/
+build/

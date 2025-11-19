@@ -1,4 +1,5 @@
 # SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
+#
 # SPDX-License-Identifier: ISC
 
 import datetime
@@ -15,12 +16,13 @@ def test_simple_load_constructor_args() -> None:
             "year": 2003,
         }
     }
-    wired: apywire.Wired[object] = apywire.wire(spec)
+    wired: apywire.Wired = apywire.wire(spec)
     instance = wired.yearsAgo
     assert isinstance(instance, datetime.datetime)
     assert instance.year == 2003
     assert instance.month == 12
     assert instance.day == 13
+    assert instance is wired.yearsAgo
 
 
 def test_simple_raise_on_nonexistent_wired_attribute() -> None:
