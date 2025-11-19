@@ -1,8 +1,9 @@
 # SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
+#
 # SPDX-License-Identifier: ISC
 
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools", "wheel", "Cython"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,21 +11,22 @@ name = "apywire"
 version = "0.1.0"
 description = "A package to wire up objects"
 readme = "README.md"
-license = {text = "ISC"}
+license = "ISC"
 authors = [{name = "Alexandre Gomes Gaigalas", email = "alganet@gmail.com"}]
 maintainers = [{name = "Alexandre Gomes Gaigalas", email = "alganet@gmail.com"}]
 keywords = ["object", "wiring", "dependency", "injection"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: ISC License (ISCL)",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = []
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 
 [project.urls]
 Homepage = "https://github.com/alganet/apywire"
@@ -36,6 +38,7 @@ dev = [
     "black",
     "build",
     "coverage",
+    "Cython",
     "flake8",
     "isort",
     "mypy",
@@ -43,6 +46,7 @@ dev = [
     "pytest",
     "reuse",
     "twine",
+    "types-setuptools",
 ]
 
 [tool.setuptools.packages.find]
@@ -71,3 +75,11 @@ warn_unused_configs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["apywire"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 95
