@@ -5,19 +5,13 @@
 """A package to wire up objects."""
 
 from .wiring import (
-    Blueprint,
     InstanceData,
     Spec,
-    Wired,
-    compile,
-    wire,
+    Wiring,
 )
 
 __all__ = [
-    "Blueprint",
     "InstanceData",
     "Spec",
-    "Wired",
-    "compile",
-    "wire",
+    "Wiring",
 ]

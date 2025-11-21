@@ -4,38 +4,34 @@
 
 """Core wiring functionality."""
 
+import ast
 import importlib
+from types import EllipsisType
 from typing import (
     Callable,
     Dict,
-    List,
-    Tuple,
     TypeAlias,
     cast,
 )
 
-InstanceData: TypeAlias = Dict[str, object]
-Blueprint: TypeAlias = Tuple[str, str, str, InstanceData]
-
+ConstantValue: TypeAlias = (
+    str | bytes | bool | int | float | complex | EllipsisType | None
+)
+InstanceData: TypeAlias = Dict[str, object | ConstantValue]
 Spec: TypeAlias = Dict[str, InstanceData]
 
 
-def _parse_spec(spec: Spec) -> List[Blueprint]:
-    """Parses a Spec into Blueprints for instantiation."""
-    items = []
-    for key, value in spec.items():
-        type_str, name = key.rsplit(" ", 1)
-        parts = type_str.split(".")
-        module_name = ".".join(parts[:-1])
-        class_name = parts[-1]
-        items.append((module_name, class_name, name, value))
-    return items
-
-
-class Wired:
+class Wiring:
     """Lazy-loaded container for wired objects."""
 
-    def __init__(self, parsed: List[Blueprint]) -> None:
+    def __init__(self, spec: Spec) -> None:
+        parsed = []
+        for key, value in spec.items():
+            type_str, name = key.rsplit(" ", 1)
+            parts = type_str.split(".")
+            module_name = ".".join(parts[:-1])
+            class_name = parts[-1]
+            parsed.append((module_name, class_name, name, value))
         self._parsed = {
             name: (module_name, class_name, value)
             for module_name, class_name, name, value in parsed
@@ -57,28 +53,81 @@ class Wired:
             self._instances[name] = cls(**value)
         return self._instances[name]
 
+    def compile(self) -> str:
+        """Compiles the Spec into a string containing Python code."""
+        # Build AST for the module
+        body: list[ast.stmt] = []
 
-def wire(spec: Spec) -> Wired:
-    """Creates a lazy-loaded Wired object from a Spec."""
-    return Wired(_parse_spec(spec))
+        # Add import statements
+        modules = set()
+        for module_name, _, _ in self._parsed.values():
+            modules.add(module_name)
+        for module in sorted(modules):
+            body.append(ast.Import(names=[ast.alias(name=module)]))
 
+        # Build class body
+        class_body: list[ast.stmt] = []
+        for name, (module_name, class_name, value) in self._parsed.items():
+            # Build the return statement: return module.class(**value)
+            module_attr = ast.Attribute(
+                value=ast.Name(id=module_name, ctx=ast.Load()),
+                attr=class_name,
+                ctx=ast.Load(),
+            )
+            kwargs = []
+            for k, v in value.items():
+                kwargs.append(
+                    ast.keyword(k, value=ast.Constant(cast(ConstantValue, v)))
+                )
+            call = ast.Call(func=module_attr, args=[], keywords=kwargs)
+            return_stmt = ast.Return(value=call)
 
-def compile(spec: Spec) -> str:
-    """Compiles a Spec into a string containing Python code."""
-    parsed = _parse_spec(spec)
-    modules = set()
-    properties = []
-    for module_name, class_name, name, value in parsed:
-        modules.add(module_name)
-        type_str = f"{module_name}.{class_name}"
-        # value is always dict per type
-        kwargs = ", ".join(f"{k}={repr(v)}" for k, v in value.items())
-        prop = (
-            "    @property\n"
-            f"    def {name}(self):\n"
-            f"        return {type_str}({kwargs})"
+            # Build function def for the property
+            func_def = ast.FunctionDef(
+                name=name,
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[ast.arg(arg="self")],
+                    vararg=None,
+                    kwarg=None,
+                    defaults=[],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                ),
+                body=[return_stmt],
+                decorator_list=[ast.Name(id="property", ctx=ast.Load())],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
+            class_body.append(func_def)
+
+        class_body = [ast.Pass()] if not class_body else class_body
+        # Build class definition
+        class_def = ast.ClassDef(
+            name="Compiled",
+            bases=[],
+            keywords=[],
+            body=class_body,
+            decorator_list=[],
+            type_params=[],
         )
-        properties.append(prop)
-    imports = [f"import {module}" for module in sorted(modules)]
-    class_def = ["class Compiled:"] + properties + ["compiled = Compiled()"]
-    return "\n".join(imports + class_def)
+        body.append(class_def)
+
+        # Add compiled = Compiled()
+        assign = ast.Assign(
+            targets=[ast.Name(id="compiled", ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Name(id="Compiled", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            ),
+        )
+        body.append(assign)
+
+        # Create module AST
+        module_ast = ast.Module(body=body, type_ignores=[])
+        ast.fix_missing_locations(module_ast)
+
+        # Unparse to string
+        return ast.unparse(module_ast)
