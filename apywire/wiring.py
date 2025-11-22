@@ -10,17 +10,21 @@ from __future__ import annotations
 import ast
 import asyncio
 import importlib
-import threading
-import time
 from types import EllipsisType
 from typing import (
     Awaitable,
     Callable,
-    Literal,
     TypeAlias,
     cast,
     final,
 )
+
+from apywire.exceptions import (
+    CircularWiringError,
+    UnknownPlaceholderError,
+    WiringError,
+)
+from apywire.thread_safety import CompiledThreadSafeMixin, ThreadLocalState
 
 _ConstantValue: TypeAlias = (
     str | bytes | bool | int | float | complex | EllipsisType | None
@@ -89,42 +93,10 @@ _UnresolvedParsedEntry: TypeAlias = tuple[
 ]  # (module, class, name, data)
 
 
-class _ThreadLocalState(threading.local):
+class _ThreadLocalState(ThreadLocalState):
     """Thread-local state for wiring resolution.
 
-    Attributes:
-        resolving_stack: Stack of attribute names currently being resolved
-                        in this thread (for circular dependency detection).
-        mode: Current instantiation mode ('optimistic', 'global', or None).
-        held_locks: List of locks currently held by this thread.
-    """
-
-    resolving_stack: list[str]
-    mode: Literal["optimistic", "global"] | None
-    held_locks: list[threading.RLock]
-
-
-class WiringError(AttributeError):
-    """Raised when the wiring system cannot instantiate an attribute.
-
-    This wraps the underlying exception to provide context on which
-    attribute failed to instantiate, while preserving the original
-    exception as the cause.
-    """
-
-
-class UnknownPlaceholderError(WiringError):
-    """Raised by `_resolve_runtime` when a placeholder name is not
-    found in either constants (`_values`) or parsed spec entries
-    (`_parsed`).
-    """
-
-
-class CircularWiringError(WiringError):
-    """Raised when a circular wiring dependency is detected.
-
-    This class is a `WiringError` subtype for simpler programmatic
-    handling of wiring-specific failures.
+    Inherits from ThreadLocalState to get properly typed attributes.
     """
 
 
@@ -140,7 +112,7 @@ _PROPERTY_ARGS = ast.arguments(
 )
 
 
-class Wiring:
+class Wiring(CompiledThreadSafeMixin):
     """Lazy-loaded container for wired objects."""
 
     _parsed: dict[str, _ParsedEntry]
@@ -195,15 +167,8 @@ class Wiring:
         }
         # Instances will be lazily instantiated and stored in self._values
         if self._thread_safe:
-            # Thread-safe mode: use locks for concurrent access.
-            # Use reentrant locks to enable re-entrancy while creating
-            # dependent attributes.
-            self._inst_lock = threading.RLock()
-            # Per-thread resolving stack to detect circular dependencies.
-            self._local: _ThreadLocalState = _ThreadLocalState()
-            # Per-attribute locks used to increase parallelism when possible.
-            self._attr_locks: dict[str, threading.RLock] = {}
-            self._attr_locks_lock = threading.Lock()
+            # Thread-safe mode: use mixin helpers for lock state.
+            self._init_thread_safety(max_lock_attempts, lock_retry_sleep)
         else:
             # Non-thread-safe mode: use simple list for resolving stack
             self._resolving_stack: list[str] = []
@@ -334,6 +299,7 @@ class Wiring:
         data: _ResolvedSpecMapping,
         *,
         aio: bool = False,
+        thread_safe: bool = False,
     ) -> ast.FunctionDef | ast.AsyncFunctionDef:
         """Build an AST FunctionDef for a cached accessor that returns
         ``module.class(**data)``.
@@ -350,33 +316,101 @@ class Wiring:
             ctx=ast.Load(),
         )
         kwargs: list[ast.keyword] = []
-        # Build either synchronous or async call and associated pre-steps
+        # When compiling async accessors we must precompute awaited
+        # referenced attributes into locals so that the constructor
+        # lambda passed to a thread pool executor is pure synchronous.
         pre_statements: list[ast.stmt] = []
-        for k, v in data.items():
-            v_expr = self._astify(v, aio=aio)
-            if aio:
-                # Assign expression to local var to support awaiting
-                var_name = f"__val_{k}"
-                pre_statements.append(
-                    ast.Assign(
+
+        # Helper to extract `await self.<name>()` occurrences from AST
+        # expressions and replace them with local variables. This lets us
+        # run a synchronous lambda in `run_in_executor` without `await`
+        # nodes embedded inside it.
+        counter = 0
+
+        def _replace_awaits_with_locals(node: ast.expr) -> ast.expr:
+            nonlocal counter
+
+            if isinstance(node, ast.Await):
+                inner = node.value
+                if (
+                    isinstance(inner, ast.Call)
+                    and isinstance(inner.func, ast.Attribute)
+                    and isinstance(inner.func.value, ast.Name)
+                    and inner.func.value.id == "self"
+                ):
+                    # produce a unique variable name and precompute the await
+                    counter += 1
+                    var_name = f"__val_{counter}"
+                    assign = ast.Assign(
                         targets=[ast.Name(id=var_name, ctx=ast.Store())],
-                        value=v_expr,
+                        value=node,
                     )
+                    pre_statements.append(assign)
+                    return ast.Name(id=var_name, ctx=ast.Load())
+                return node
+
+            # Recurse into common composite nodes
+            if isinstance(node, ast.Call):
+                new_args = [_replace_awaits_with_locals(a) for a in node.args]
+                new_keywords = [
+                    ast.keyword(
+                        arg=k.arg, value=_replace_awaits_with_locals(k.value)
+                    )
+                    for k in node.keywords
+                ]
+                return ast.Call(
+                    func=node.func, args=new_args, keywords=new_keywords
                 )
-                kwargs.append(
-                    ast.keyword(k, value=ast.Name(id=var_name, ctx=ast.Load()))
+            if isinstance(node, ast.Dict):
+                new_keys = [
+                    _replace_awaits_with_locals(k) if k is not None else None
+                    for k in node.keys
+                ]
+                new_values = [
+                    _replace_awaits_with_locals(v) for v in node.values
+                ]
+                return ast.Dict(keys=new_keys, values=new_values)
+            if isinstance(node, ast.List):
+                return ast.List(
+                    elts=[_replace_awaits_with_locals(e) for e in node.elts],
+                    ctx=node.ctx,
                 )
+            if isinstance(node, ast.Tuple):
+                return ast.Tuple(
+                    elts=[_replace_awaits_with_locals(e) for e in node.elts],
+                    ctx=node.ctx,
+                )
+            return node
+
+        for key, value in data.items():
+            raw_val_ast = self._astify(value, aio=aio)
+            if aio:
+                # Replace any awaited accessors with local precomputed
+                # variables and assign all values to local variables so
+                # that the executor lambda can be synchronous.
+                val_ast = _replace_awaits_with_locals(raw_val_ast)
+                # Use named variables for top-level keyword args to make
+                # the generated code more readable and deterministic.
+                var_name = f"__val_{key}"
+                assign = ast.Assign(
+                    targets=[ast.Name(id=var_name, ctx=ast.Store())],
+                    value=val_ast,
+                )
+                pre_statements.append(assign)
+                kw_val: ast.expr = ast.Name(id=var_name, ctx=ast.Load())
             else:
-                kwargs.append(ast.keyword(k, value=v_expr))
+                kw_val = raw_val_ast
+            kwargs.append(ast.keyword(arg=key, value=kw_val))
+
+        # Build the actual constructor call (module.Class(**kwargs))
         call = ast.Call(func=module_attr, args=[], keywords=kwargs)
+
+        # Cache attribute name like `_name` used to store instantiated
+        # objects on `self` at runtime. The compiled accessor returns
+        # `self._name` when present.
         cache_attr = f"_{name}"
-        return_stmt = ast.Return(
-            value=ast.Attribute(
-                value=ast.Name(id="self", ctx=ast.Load()),
-                attr=cache_attr,
-                ctx=ast.Load(),
-            )
-        )
+
+        # if not hasattr(self, '_name'): ...
         has_check = ast.UnaryOp(
             op=ast.Not(),
             operand=ast.Call(
@@ -389,6 +423,15 @@ class Wiring:
             ),
         )
 
+        return_stmt = ast.Return(
+            value=ast.Attribute(
+                value=ast.Name(id="self", ctx=ast.Load()),
+                attr=cache_attr,
+                ctx=ast.Load(),
+            )
+        )
+        # Build the assignment that sets the cache value; different
+        # behavior is required for async vs sync callers.
         if not aio:
             assign_cache = ast.Assign(
                 targets=[
@@ -452,14 +495,14 @@ class Wiring:
                 ],
                 value=run_call,
             )
-        if_stmt_body = (
-            pre_statements + [loop_assign, assign_cache]
-            if aio
-            else [assign_cache]
-        )
+        if_stmt_body = pre_statements.copy()
+        if aio:
+            if_stmt_body.append(loop_assign)
+        if_stmt_body.append(assign_cache)
         if_stmt = ast.If(test=has_check, body=if_stmt_body, orelse=[])
         func_def: ast.FunctionDef | ast.AsyncFunctionDef
-        if not aio:
+        # If the compiled output is thread-safe, inject locking logic
+        if not aio and not thread_safe:
             func_def = ast.FunctionDef(
                 name=name,
                 args=_PROPERTY_ARGS,
@@ -469,11 +512,140 @@ class Wiring:
                 type_comment=None,
                 type_params=[],
             )
-        else:
+        elif not aio and thread_safe:
+            # Build sync thread-safe version using code template
+            # Build a lambda maker which is a synchronous callable used by
+            # the helper mixin to invoke the constructor within the
+            # instantiation lock management. We pass this maker to
+            # `self._instantiate_attr(name, maker)`.
+            maker = ast.Lambda(
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[],
+                    vararg=None,
+                    kwarg=None,
+                    defaults=[],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                ),
+                body=call,
+            )
+            call_inst = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="self", ctx=ast.Load()),
+                    attr="_instantiate_attr",
+                    ctx=ast.Load(),
+                ),
+                args=[ast.Constant(value=name), maker],
+                keywords=[],
+            )
+            assign_cache = ast.Assign(
+                targets=[
+                    ast.Attribute(
+                        value=ast.Name(id="self", ctx=ast.Load()),
+                        attr=cache_attr,
+                        ctx=ast.Store(),
+                    )
+                ],
+                value=call_inst,
+            )
+            if_stmt_body = pre_statements.copy()
+            if_stmt_body.append(assign_cache)
+            func_def = ast.FunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=[
+                    ast.If(test=has_check, body=if_stmt_body, orelse=[]),
+                    return_stmt,
+                ],
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
+        # This branch handles the synchronous, non-thread-safe case
+        elif aio and not thread_safe:
             func_def = ast.AsyncFunctionDef(
                 name=name,
                 args=_PROPERTY_ARGS,
                 body=[if_stmt, return_stmt],
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
+        else:  # aio and thread_safe
+            # Create a maker lambda (synchronous) for the helper
+            # mixin and run it in executor. Precomputed locals are
+            # already present in `pre_statements` to avoid 'await' in
+            # the lambda body.
+            maker = ast.Lambda(
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[],
+                    vararg=None,
+                    kwarg=None,
+                    defaults=[],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                ),
+                body=call,
+            )
+            instantiate_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="self", ctx=ast.Load()),
+                    attr="_instantiate_attr",
+                    ctx=ast.Load(),
+                ),
+                args=[ast.Constant(value=name), maker],
+                keywords=[],
+            )
+            # Build lambda passed to executor that calls the mixin
+            executor_lambda = ast.Lambda(
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[],
+                    vararg=None,
+                    kwarg=None,
+                    defaults=[],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                ),
+                body=instantiate_call,
+            )
+            run_call = ast.Await(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="loop", ctx=ast.Load()),
+                        attr="run_in_executor",
+                        ctx=ast.Load(),
+                    ),
+                    args=[ast.Constant(value=None), executor_lambda],
+                    keywords=[],
+                )
+            )
+            assign_cache = ast.Assign(
+                targets=[
+                    ast.Attribute(
+                        value=ast.Name(id="self", ctx=ast.Load()),
+                        attr=cache_attr,
+                        ctx=ast.Store(),
+                    )
+                ],
+                value=run_call,
+            )
+            body = pre_statements.copy()
+            # Ensure we compute the event loop variable before calling into
+            # run_in_executor.
+            body.append(loop_assign)
+            body.append(assign_cache)
+            func_def = ast.AsyncFunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=[
+                    ast.If(test=has_check, body=body, orelse=[]),
+                    return_stmt,
+                ],
                 decorator_list=[],
                 returns=None,
                 type_comment=None,
@@ -579,17 +751,15 @@ class Wiring:
             finally:
                 self._get_resolving_stack().pop()
 
-        # Thread-safe mode: use locks and modes
+        # Thread-safe mode: use the mixin's `_instantiate_attr` helper.
         stack = self._get_resolving_stack()
         stack.append(name)
         try:
-            lock = self._get_attribute_lock(name)
-            mode = self._local.mode if hasattr(self._local, "mode") else None
 
-            if mode is None:
-                return self._instantiate_top_level(name, lock)
+            def _maker() -> _RuntimeValue:
+                return self._instantiate_impl(name)
 
-            return self._instantiate_nested(name, lock, mode)
+            return self._instantiate_attr(name, _maker)
         finally:
             stack.pop()
 
@@ -617,22 +787,11 @@ class Wiring:
                 self._resolving_stack = []
             return self._resolving_stack
 
-        if not hasattr(self._local, "resolving_stack"):
-            self._local.resolving_stack = []
-        return self._local.resolving_stack
+        # Delegate to mixin for thread-local resolving stack
+        return super()._get_resolving_stack()
 
-    def _get_held_locks(self) -> list[threading.RLock]:
-        """Get or initialize the thread-local held locks list."""
-        if not hasattr(self._local, "held_locks"):
-            self._local.held_locks = []
-        return self._local.held_locks
-
-    def _get_attribute_lock(self, name: str) -> threading.RLock:
-        """Get or create a per-attribute lock."""
-        with self._attr_locks_lock:
-            if name not in self._attr_locks:
-                self._attr_locks[name] = threading.RLock()
-            return self._attr_locks[name]
+    # `_get_held_locks` and `_get_attribute_lock` are provided by the
+    # `CompiledThreadSafeMixin` when `thread_safe` is enabled.
 
     def _instantiate_impl(self, name: str) -> _RuntimeValue:
         """Import module, resolve kwargs and instantiate the class."""
@@ -656,126 +815,12 @@ class Wiring:
         self._values[name] = instance
         return instance
 
-    def _instantiate_top_level(
-        self,
-        name: str,
-        lock: threading.RLock,
-    ) -> _RuntimeValue:
-        # Try optimistic per-attribute lock
-        if lock.acquire(blocking=False):
-            try:
-                return self._attempt_optimistic_instantiation(name, lock)
-            except _LockUnavailable:
-                # Fall back to global lock
-                pass
+    # Thread-safety helpers are provided by CompiledThreadSafeMixin and
+    # accessed via `_init_thread_safety()`, `_get_attribute_lock()`,
+    # `_get_held_locks()`, `_release_held_locks()` and
+    # `_instantiate_attr(name, maker)`.
 
-        return self._attempt_global_instantiation(name, lock)
-
-    def _attempt_optimistic_instantiation(
-        self,
-        name: str,
-        lock: threading.RLock,
-    ) -> _RuntimeValue:
-        """Attempt optimistic per-attribute instantiation.
-
-        Raises `_LockUnavailable` if the per-attribute lock cannot be
-        acquired.
-        """
-        self._local.mode = "optimistic"
-        held_locks = self._get_held_locks()
-        held_locks.clear()
-        held_locks.append(lock)
-
-        try:
-            result = self._instantiate_impl(name)
-            # Success - clean up and return
-            self._release_held_locks()
-            self._local.mode = None
-            return result
-        except _LockUnavailable:
-            self._release_held_locks()
-            raise
-        except (UnknownPlaceholderError, CircularWiringError):
-            self._release_held_locks()
-            raise
-        except WiringError as e:
-            self._release_held_locks()
-            raise WiringError(f"failed to instantiate '{name}'") from e
-        except Exception as e:
-            self._release_held_locks()
-            raise WiringError(f"failed to instantiate '{name}'") from e
-        finally:
-            if (
-                hasattr(self._local, "mode")
-                and self._local.mode == "optimistic"
-            ):
-                self._local.mode = None
-
-    def _attempt_global_instantiation(
-        self,
-        name: str,
-        lock: threading.RLock,
-    ) -> _RuntimeValue:
-        self._local.mode = "global"
-
-        with self._inst_lock:
-            lock.acquire()
-            try:
-                held_locks = self._get_held_locks()
-                held_locks.clear()
-                held_locks.append(lock)
-                # Retry loop in case nested calls still raise
-                # `_LockUnavailable` despite global mode (race). Sleep
-                # briefly between attempts.
-                attempts = 0
-                while True:
-                    try:
-                        return self._instantiate_impl(name)
-                    except _LockUnavailable:
-                        attempts += 1
-                        if attempts > self._max_lock_attempts:
-                            raise WiringError(
-                                f"failed to instantiate '{name}'"
-                            )
-                        time.sleep(self._lock_retry_sleep)
-                        continue
-            finally:
-                self._release_held_locks()
-                self._local.mode = None
-
-    def _instantiate_nested(
-        self,
-        name: str,
-        lock: threading.RLock,
-        mode: Literal["optimistic", "global"],
-    ) -> _RuntimeValue:
-        if mode == "optimistic":
-            # Acquire per-attribute lock non-blocking; on failure raise
-            # `_LockUnavailable` to fall back to global lock mode.
-            if not lock.acquire(blocking=False):
-                raise _LockUnavailable()
-        else:
-            # In 'global' mode, acquire the per-attribute lock blocking.
-            lock.acquire()
-
-        held = self._get_held_locks()
-        held.append(lock)
-        try:
-            return self._instantiate_impl(name)
-        finally:
-            # Lock remains held until the outermost caller releases it.
-            pass
-
-    def _release_held_locks(self) -> None:
-        """Release locks held by the current thread in LIFO order."""
-        if not hasattr(self._local, "held_locks"):
-            return
-
-        for lock in reversed(self._local.held_locks):
-            lock.release()
-        self._local.held_locks = []
-
-    def compile(self, *, aio: bool = False) -> str:
+    def compile(self, *, aio: bool = False, thread_safe: bool = False) -> str:
         """Compiles the Spec into a string containing Python code.
 
         Args:
@@ -798,11 +843,66 @@ class Wiring:
             modules.add(module_name)
         if aio:
             modules.add("asyncio")
+        if thread_safe:
+            # When compiling thread_safe, import thread-safety primitives
+            modules.add("apywire.thread_safety")
+            modules.add("apywire.exceptions")
         for module in sorted(modules):
-            body.append(ast.Import(names=[ast.alias(name=module)]))
+            if module == "apywire.thread_safety":
+                # Import CompiledThreadSafeMixin from thread_safety
+                body.append(
+                    ast.ImportFrom(
+                        module="apywire.thread_safety",
+                        names=[
+                            ast.alias(name="CompiledThreadSafeMixin"),
+                        ],
+                        level=0,
+                    )
+                )
+            elif module == "apywire.exceptions":
+                # Import LockUnavailableError from exceptions
+                body.append(
+                    ast.ImportFrom(
+                        module="apywire.exceptions",
+                        names=[
+                            ast.alias(name="LockUnavailableError"),
+                        ],
+                        level=0,
+                    )
+                )
+            else:
+                body.append(ast.Import(names=[ast.alias(name=module)]))
 
         # Build class body
         class_body: list[ast.stmt] = []
+        # When thread safe, add __init__ that calls helper mixin init
+        if thread_safe:
+            # class __init__
+            init_body: list[ast.stmt] = []
+            # compiled class will inherit from the mixin and just call
+            # `_init_thread_safety` from its constructor
+            init_body.append(
+                ast.Expr(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id="self", ctx=ast.Load()),
+                            attr="_init_thread_safety",
+                            ctx=ast.Load(),
+                        ),
+                        args=[],
+                        keywords=[],
+                    ),
+                )
+            )
+            init_def = ast.FunctionDef(
+                name="__init__",
+                args=_PROPERTY_ARGS,
+                body=init_body,
+                decorator_list=[],
+                returns=None,
+                type_params=[],
+            )
+            class_body.insert(0, init_def)
         for name, (module_name, class_name, data) in self._parsed.items():
             class_body.append(
                 self._compile_property(
@@ -811,6 +911,7 @@ class Wiring:
                     class_name,
                     data,
                     aio=aio,
+                    thread_safe=thread_safe,
                 )
             )
 
@@ -827,10 +928,18 @@ class Wiring:
             )
 
         class_body = [ast.Pass()] if not class_body else class_body
+        # When using thread_safe compiled output we will rely on the
+        # CompiledThreadSafeMixin and _LockUnavailableError imported from
+        # apywire.thread_safety rather than embedding helper code.
         # Build class definition
+        class_bases: list[ast.expr] = []
+        if thread_safe:
+            class_bases.append(
+                ast.Name(id="CompiledThreadSafeMixin", ctx=ast.Load())
+            )
         class_def = ast.ClassDef(
             name="Compiled",
-            bases=[],
+            bases=class_bases,
             keywords=[],
             body=class_body,
             decorator_list=[],
@@ -914,8 +1023,6 @@ class AioAccessor:
         return _acall
 
 
-class _LockUnavailable(RuntimeError):
-    """Internal exception raised when a per-attribute lock cannot be acquired
-    in optimistic (non-blocking) mode and we need to fall back to the
-    global instantiation lock.
-    """
+# `_LockUnavailableError` is imported from `apywire.thread_safety` to
+# keep a single canonical definition shared between runtime and compiled
+# variants. See `apywire/thread_safety.py` for the implementation.

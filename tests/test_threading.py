@@ -11,12 +11,20 @@ concurrent access patterns.
 import sys
 import threading
 from types import ModuleType
-from typing import cast
+from typing import Awaitable, Protocol, cast
 
 import pytest
 
 import apywire
-from apywire.wiring import _LockUnavailable
+from apywire.exceptions import LockUnavailableError
+
+
+class SyncSingletonProtocol(Protocol):
+    def singleton(self) -> object: ...
+
+
+class AsyncSingletonProtocol(Protocol):
+    def singleton(self) -> Awaitable[object]: ...
 
 
 def test_thread_safe_singleton_instantiation() -> None:
@@ -188,7 +196,7 @@ def test_lock_retry_logic_with_eventual_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that the retry logic in global instantiation mode works correctly
-    when _LockUnavailable is raised a few times before succeeding.
+    when _LockUnavailableError is raised a few times before succeeding.
     """
 
     class SomeClass:
@@ -212,15 +220,14 @@ def test_lock_retry_logic_with_eventual_success(
         )
 
         # Track how many times _instantiate_impl is called
-        call_count = 0
+        call_count = [0]
         original_instantiate = wired._instantiate_impl
 
         def mock_instantiate_impl(name: str) -> object:
-            nonlocal call_count
-            call_count += 1
-            # Raise _LockUnavailable the first 3 times, then succeed
-            if call_count <= 3:
-                raise _LockUnavailable()
+            call_count[0] += 1
+            # Raise LockUnavailableError the first 3 times, then succeed
+            if call_count[0] < 3:
+                raise LockUnavailableError()
             return original_instantiate(name)
 
         monkeypatch.setattr(wired, "_instantiate_impl", mock_instantiate_impl)
@@ -232,7 +239,7 @@ def test_lock_retry_logic_with_eventual_success(
         result = wired.obj()
         assert isinstance(result, SomeClass)
         assert result.value == "success"
-        assert call_count == 4  # 3 failures + 1 success
+        assert call_count[0] == 3  # Raised at count 1,2; succeeded at 3
     finally:
         if "mymod_retry" in sys.modules:
             del sys.modules["mymod_retry"]
@@ -262,11 +269,11 @@ def test_lock_retry_logic_exceeds_max_attempts(
             spec, max_lock_attempts=5, lock_retry_sleep=0.001, thread_safe=True
         )
 
-        # Mock _instantiate_impl to always raise _LockUnavailable
-        def mock_instantiate_impl(name: str) -> object:
-            raise _LockUnavailable()
+        # Mock _instantiate_impl to always raise LockUnavailableError
+        def mock_instantiate(*args: object) -> object:
+            raise LockUnavailableError()
 
-        monkeypatch.setattr(wired, "_instantiate_impl", mock_instantiate_impl)
+        monkeypatch.setattr(wired, "_instantiate_impl", mock_instantiate)
 
         # Force global instantiation mode
         lock = wired._get_attribute_lock("obj")
@@ -528,3 +535,92 @@ def test_wiring_error_rewrapping_in_optimistic_mode(
     finally:
         if "mymod_wiring_err" in sys.modules:
             del sys.modules["mymod_wiring_err"]
+
+
+def test_compiled_thread_safe_singleton_instantiation_sync() -> None:
+    import sys
+    import threading
+    from types import ModuleType
+
+    class SomeClass:
+        inst_count: int = 0
+
+        def __init__(self) -> None:
+            SomeClass.inst_count += 1
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("mymod_compiled_thread")
+            self.SomeClass = SomeClass
+
+    mod = MockModule()
+    sys.modules["mymod_compiled_thread"] = mod
+    try:
+        spec: apywire.Spec = {
+            "mymod_compiled_thread.SomeClass singleton": {},
+        }
+        wired = apywire.Wiring(spec, thread_safe=False)
+        pythonCode = wired.compile(thread_safe=True)
+        execd: dict[str, object] = {}
+        exec(pythonCode, execd)
+        compiled_obj = cast(SyncSingletonProtocol, execd["compiled"])
+
+        SomeClass.inst_count = 0
+
+        def call_singleton() -> None:
+            compiled_obj.singleton()
+
+        threads = [threading.Thread(target=call_singleton) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert SomeClass.inst_count == 1
+    finally:
+        if "mymod_compiled_thread" in sys.modules:
+            del sys.modules["mymod_compiled_thread"]
+
+
+def test_compiled_thread_safe_singleton_instantiation_async() -> None:
+    import asyncio
+    import sys
+    from types import ModuleType
+
+    class SomeClass:
+        inst_count: int = 0
+
+        def __init__(self) -> None:
+            SomeClass.inst_count += 1
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("mymod_compiled_thread_async")
+            self.SomeClass = SomeClass
+
+    mod = MockModule()
+    sys.modules["mymod_compiled_thread_async"] = mod
+    try:
+        spec: apywire.Spec = {
+            "mymod_compiled_thread_async.SomeClass singleton": {},
+        }
+        wired = apywire.Wiring(spec, thread_safe=False)
+        pythonCode = wired.compile(aio=True, thread_safe=True)
+        execd: dict[str, object] = {}
+        exec(pythonCode, execd)
+        compiled_obj = cast(AsyncSingletonProtocol, execd["compiled"])
+
+        SomeClass.inst_count = 0
+
+        async def call_singleton() -> object:
+            return await compiled_obj.singleton()
+
+        async def run_all() -> list[object]:
+            tasks = [asyncio.create_task(call_singleton()) for _ in range(8)]
+            return await asyncio.gather(*tasks)
+
+        asyncio.run(run_all())
+        assert SomeClass.inst_count == 1
+    finally:
+        if "mymod_compiled_thread_async" in sys.modules:
+            del sys.modules["mymod_compiled_thread_async"]
