@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: ISC
 
-.PHONY: all format lint test coverage clean publish pip reuse
+.PHONY: all format lint test coverage clean publish pip reuse .venv
 
 all: format lint coverage build
 
@@ -16,7 +16,10 @@ reuse:
 		--license ISC \
 		--recursive .
 
-# if it gets too slow, separate reuse from format
+.venv:
+	python -m venv .venv
+	. .venv/bin/activate && make pip
+
 format: reuse
 	python -m black .
 	python -m isort .

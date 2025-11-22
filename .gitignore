@@ -6,6 +6,7 @@
 apywire/**.c
 
 # General
+.venv/
 __pycache__/
 *.pyc
 *.pyo

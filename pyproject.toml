@@ -39,6 +39,7 @@ dev = [
     "coverage",
     "Cython",
     "flake8",
+    "flake8-pyproject",
     "isort",
     "mypy",
     "pytest-cov",
@@ -52,6 +53,7 @@ dev = [
 where = ["."]
 
 [tool.black]
+exclude = ".venv"
 line-length = 79
 
 [tool.isort]
@@ -59,9 +61,11 @@ profile = "black"
 line_length = 79
 
 [tool.flake8]
+exclude = [".venv"]
 max-line-length = 79
 
 [tool.mypy]
+exclude = [".venv"]
 mypy_path = "."
 strict = true
 disallow_any_unimported = true
