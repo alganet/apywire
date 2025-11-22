@@ -24,13 +24,12 @@ _ConstantValue: TypeAlias = (
 )
 
 
-# Marker class for a placeholder reference. We declare it before the
-# TypeAliases so we can reference it directly in the `ResolvedValue`
-# alias.
+# Marker class for a placeholder reference. Declared before the
+# type aliases so `ResolvedValue` can reference it directly.
 class _WiredRef:
     """Marker for a value that references another wired attribute.
 
-    This gets resolved lazily at instantiation time.
+    Resolved lazily at instantiation.
     """
 
     __slots__ = ("name",)
@@ -39,9 +38,9 @@ class _WiredRef:
         self.name = name
 
 
-# Spec value types directly come from user-provided `Spec` input. These
-# are typically primitives or nested containers that contain primitives
-# and may contain placeholder strings like "{otherName}".
+# Spec value types come from the user-provided `Spec` input. They are
+# primitives or nested containers and may include placeholder strings
+# like "{otherName}".
 _SpecValue: TypeAlias = (
     _ConstantValue
     | str
@@ -50,9 +49,9 @@ _SpecValue: TypeAlias = (
     | dict[str, "_SpecValue"]
 )
 
-# Resolved values are the shape after parsing placeholders; strings of
-# the form "{name}" are replaced with `_WiredRef`, enabling lazy
-# resolution during runtime instantiation.
+# Resolved values are produced after parsing placeholders; strings of
+# the form "{name}" become `_WiredRef` markers and are resolved at
+# instantiation.
 _ResolvedValue: TypeAlias = (
     _ConstantValue
     | _WiredRef
@@ -61,9 +60,8 @@ _ResolvedValue: TypeAlias = (
     | dict[str, "_ResolvedValue"]
 )
 
-# Runtime values represent the types after resolution at runtime. These
-# can contain real instantiated objects (hence `object`) or constants
-# and nested containers.
+# Runtime values are the concrete types available at runtime —
+# constants, objects and nested containers.
 _RuntimeValue: TypeAlias = (
     object
     | _ConstantValue
@@ -156,16 +154,12 @@ class Wiring:
         """Initialize a Wiring container.
 
         Args:
-            spec: The wiring specification mapping.
+            spec: The wiring spec mapping.
             thread_safe: Enable thread-safe instantiation (default: False).
-                         Set to False for single-threaded applications to
-                         avoid locking overhead.
-            max_lock_attempts: Maximum number of lock acquisition retry
-                               attempts in global instantiation mode
-                               (default: 100). Only when thread_safe=True.
-            lock_retry_sleep: Sleep duration in seconds between lock retry
-                              attempts (default: 0.01 seconds).
-                              Only when thread_safe=True.
+            max_lock_attempts: Max retries in global lock mode
+                               (only when thread_safe=True).
+            lock_retry_sleep: Sleep time in seconds between lock retries
+                              (only when thread_safe=True).
         """
         self._thread_safe = thread_safe
         self._max_lock_attempts = max_lock_attempts
@@ -183,12 +177,10 @@ class Wiring:
                 # It's a constant
                 consts[key] = cast(_ConstantValue, value)
 
-        # Merge constants into unified cache
+        # Merge constants into the initial runtime cache
         self._values: dict[str, _RuntimeValue] = dict(consts)
 
-        # Resolve placeholders like "{name}" in parsed values.
-        # Implemented as a private helper method below so it can be reused
-        # and unit-tested independently of __init__.
+        # Resolve placeholders like "{name}" using _resolve.
 
         self._parsed: dict[str, _ParsedEntry] = {
             name: (
@@ -200,8 +192,9 @@ class Wiring:
         }
         # Instances will be lazily instantiated and stored in self._values
         if self._thread_safe:
-            # Thread-safe mode: use locks for concurrent access
-            # Use a reentrant lock to ensure thread-safe instantiation.
+            # Thread-safe mode: use locks for concurrent access.
+            # Use reentrant locks to enable re-entrancy while creating
+            # dependent attributes.
             self._inst_lock = threading.RLock()
             # Per-thread resolving stack to detect circular dependencies.
             self._local: _ThreadLocalState = _ThreadLocalState()
@@ -233,11 +226,10 @@ class Wiring:
         return (module_name, class_name, name, cast(_SpecMapping, value))
 
     def _resolve(self, obj: _SpecValue) -> _ResolvedValue:
-        """Resolve placeholders in parsed values into _WiredRef markers.
+        """Resolve placeholders into `_WiredRef` markers for runtime.
 
-        This is a recursive resolution that replaces strings of the form
-        "{name}" with a `_WiredRef(name)` marker to be resolved at
-        instantiation time.
+        Replaces strings of the form "{name}" with a `_WiredRef(name)`
+        for later resolution.
         """
         if isinstance(obj, str):
             if obj.startswith("{") and obj.endswith("}"):
@@ -271,14 +263,10 @@ class Wiring:
                 raise UnknownPlaceholderError(
                     f"Unknown placeholder '{o.name}' referenced{ctx}."
                 )
-            # The membership check above ensures that `o.name` is a known
-            # placeholder; if getattr raises `AttributeError` here, it's
-            # likely due to a failure during instantiation (for example
-            # class __init__ raising an AttributeError), and we should not
-            # conflate that with an unknown placeholder error. Let the
-            # original exception bubble up unchanged so callers can
-            # diagnose the real cause.
-            return cast(object, getattr(self, o.name))
+            # Membership check ensures `o.name` is known; if getattr raises
+            # AttributeError it's from instance creation — let it propagate.
+            # Call the accessor `self.name()` to get the runtime value.
+            return cast(object, getattr(self, o.name)())
         if isinstance(o, dict):
             return {
                 k: self._resolve_runtime(v, context=context)
@@ -291,16 +279,21 @@ class Wiring:
         return o
 
     def _astify(self, obj: _ResolvedValue) -> ast.expr:
-        """Convert a Python object (may contain `_WiredRef`) into AST.
+        """Convert a Python object (possibly a `_WiredRef`) to AST.
 
-        Supports nested lists, tuples and dicts and emits `self.<name>`
-        for `_WiredRef` values.
+        Nested lists, tuples and dicts are supported. `_WiredRef` becomes
+        an accessor call (`self.<name>()`) to mirror runtime behavior.
         """
         if isinstance(obj, _WiredRef):
-            return ast.Attribute(
-                value=ast.Name(id="self", ctx=ast.Load()),
-                attr=obj.name,
-                ctx=ast.Load(),
+            # Access the wired value via `self.name()` in compiled code.
+            return ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="self", ctx=ast.Load()),
+                    attr=obj.name,
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
             )
         if (
             isinstance(obj, (str, bytes, bool, int, float, complex))
@@ -330,8 +323,8 @@ class Wiring:
         class_name: str,
         data: _ResolvedSpecMapping,
     ) -> ast.FunctionDef:
-        """Build the AST FunctionDef for a cached property returning the
-        given module.class(**data).
+        """Build an AST FunctionDef for a cached accessor that returns
+        module.class(**data).
         """
         module_attr = ast.Attribute(
             value=ast.Name(id=module_name, ctx=ast.Load()),
@@ -376,9 +369,7 @@ class Wiring:
             name=name,
             args=_PROPERTY_ARGS,
             body=[if_stmt, return_stmt],
-            decorator_list=[
-                ast.Name(id="property", ctx=ast.Load()),
-            ],
+            decorator_list=[],
             returns=None,
             type_comment=None,
             type_params=[],
@@ -390,79 +381,85 @@ class Wiring:
         name: str,
         value: _ConstantValue,
     ) -> ast.FunctionDef:
-        """Return an AST FunctionDef that defines a property.
-
-        The property returns the provided constant value.
+        """Return an AST FunctionDef for an accessor that returns a
+        constant value.
         """
         return_stmt = ast.Return(value=ast.Constant(value))
         func_def = ast.FunctionDef(
             name=name,
             args=_PROPERTY_ARGS,
             body=[return_stmt],
-            decorator_list=[
-                ast.Name(id="property", ctx=ast.Load()),
-            ],
+            decorator_list=[],
             returns=None,
             type_comment=None,
             type_params=[],
         )
         return func_def
 
-    def __getattr__(self, name: str) -> _RuntimeValue:
-        """Get the instantiated object for name via attribute access."""
-        # Return cached value (constant or already instantiated instance)
+    def __getattr__(self, name: str) -> Callable[[], _RuntimeValue]:
+        """Return an accessor callable for `name` that returns the
+        instantiated object for that name when invoked.
+        """
+        # Return cached value (constant or already instantiated)
         if name in self._values:
-            return self._values[name]
+            # Return a callable that returns the current cached value.
+            def _quick() -> _RuntimeValue:
+                return self._values[name]
+
+            return _quick
 
         if name not in self._parsed:
             raise AttributeError(f"no attribute '{name}'")
 
         self._check_circular_dependency(name)
 
-        if not self._thread_safe:
-            # Fast path: non-thread-safe mode
-            self._resolving_stack.append(name)
-            try:
+        # Create and return a bound accessor function that mirrors the
+        # behavior previously implemented in __getattr__ (including
+        # threading/locking behavior and exception wrapping).
+        def _accessor() -> _RuntimeValue:
+            # Fast non-thread-safe path
+            if not self._thread_safe:
+                self._get_resolving_stack().append(name)
                 try:
-                    return self._instantiate_impl(name)
-                except (UnknownPlaceholderError, CircularWiringError):
-                    # These errors should propagate as-is
-                    raise
-                except WiringError as e:
-                    # Wrap existing WiringError with context
-                    raise WiringError(f"failed to instantiate '{name}'") from e
-                except Exception as e:
-                    # Wrap any other exception as WiringError
-                    raise WiringError(f"failed to instantiate '{name}'") from e
+                    try:
+                        return self._instantiate_impl(name)
+                    except (UnknownPlaceholderError, CircularWiringError):
+                        raise
+                    except WiringError as e:
+                        raise WiringError(
+                            f"failed to instantiate '{name}'"
+                        ) from e
+                    except Exception as e:
+                        raise WiringError(
+                            f"failed to instantiate '{name}'"
+                        ) from e
+                finally:
+                    self._get_resolving_stack().pop()
+
+            # Thread-safe mode: use locks and modes
+            stack = self._get_resolving_stack()
+            stack.append(name)
+            try:
+                lock = self._get_attribute_lock(name)
+                mode = (
+                    self._local.mode if hasattr(self._local, "mode") else None
+                )
+
+                if mode is None:
+                    return self._instantiate_top_level(name, lock)
+
+                return self._instantiate_nested(name, lock, mode)
             finally:
-                self._resolving_stack.pop()
+                stack.pop()
 
-        # Thread-safe mode: use locks
-        stack = self._get_resolving_stack()
-        stack.append(name)
-        try:
-            lock = self._get_attribute_lock(name)
-            mode = self._local.mode if hasattr(self._local, "mode") else None
-
-            if mode is None:
-                return self._instantiate_top_level(name, lock)
-
-            return self._instantiate_nested(name, lock, mode)
-        finally:
-            stack.pop()
+        return _accessor
 
     def _check_circular_dependency(self, name: str) -> None:
-        """Check for circular dependencies in the wiring graph."""
-        if not self._thread_safe:
-            # Non-thread-safe mode: use simple list
-            if name in self._resolving_stack:
-                cycle = " -> ".join(self._resolving_stack + [name])
-                raise CircularWiringError(
-                    f"Circular wiring dependency detected: {cycle}."
-                )
-            return
+        """Check for circular dependencies in the wiring graph.
 
-        # Thread-safe mode: use thread-local stack
+        Uses either the simple list (non-thread-safe) or thread-local
+        stack to detect cycles.
+        """
         stack = self._get_resolving_stack()
         if name in stack:
             cycle = " -> ".join(stack + [name])
@@ -471,7 +468,16 @@ class Wiring:
             )
 
     def _get_resolving_stack(self) -> list[str]:
-        """Get or initialize the thread-local resolving stack."""
+        """Get or initialize the resolving stack for the current mode.
+
+        Returns the per-thread resolving stack when `thread_safe` is True,
+        otherwise returns the single shared list on `self`.
+        """
+        if not self._thread_safe:
+            if not hasattr(self, "_resolving_stack"):
+                self._resolving_stack = []
+            return self._resolving_stack
+
         if not hasattr(self._local, "resolving_stack"):
             self._local.resolving_stack = []
         return self._local.resolving_stack
@@ -490,12 +496,9 @@ class Wiring:
             return self._attr_locks[name]
 
     def _instantiate_impl(self, name: str) -> _RuntimeValue:
-        """Inner helper that does the actual import, attribute
-        lookup, kwargs resolution and instance creation.
-        """
-        # If the instance was created by another thread while we
-        # were waiting for locks, return the existing instance so
-        # we don't create duplicates.
+        """Import module, resolve kwargs and instantiate the class."""
+        # If another thread created the instance while we were waiting,
+        # return it to avoid duplicates.
         if name in self._values:
             return self._values[name]
 
@@ -505,7 +508,7 @@ class Wiring:
             Callable[..., object], getattr(module, class_name)
         )
 
-        # Build kwargs, resolving any wired references lazily
+        # Build kwargs, resolving wired references to runtime objects
         kwargs: dict[str, _RuntimeValue] = {}
         for k, v in ins_data.items():
             kwargs[k] = self._resolve_runtime(v, context=name)
@@ -534,9 +537,10 @@ class Wiring:
         name: str,
         lock: threading.RLock,
     ) -> _RuntimeValue:
-        """Attempt to instantiate with optimistic per-attribute locking.
+        """Attempt optimistic per-attribute instantiation.
 
-        Raises _LockUnavailable if a lock cannot be acquired.
+        Raises `_LockUnavailable` if the per-attribute lock cannot be
+        acquired.
         """
         self._local.mode = "optimistic"
         held_locks = self._get_held_locks()
@@ -581,10 +585,9 @@ class Wiring:
                 held_locks = self._get_held_locks()
                 held_locks.clear()
                 held_locks.append(lock)
-                # Retry loop for the unlikely case where nested calls
-                # still raise _LockUnavailable despite the global
-                # mode being set (race condition). We yield CPU
-                # briefly between retries.
+                # Retry loop in case nested calls still raise
+                # `_LockUnavailable` despite global mode (race). Sleep
+                # briefly between attempts.
                 attempts = 0
                 while True:
                     try:
@@ -608,14 +611,12 @@ class Wiring:
         mode: Literal["optimistic", "global"],
     ) -> _RuntimeValue:
         if mode == "optimistic":
-            # Try to acquire the per-attribute lock non-blocking; if
-            # we fail, raise _LockUnavailable to signal the outermost
-            # caller to fall back to the global lock mode.
+            # Acquire per-attribute lock non-blocking; on failure raise
+            # `_LockUnavailable` to fall back to global lock mode.
             if not lock.acquire(blocking=False):
                 raise _LockUnavailable()
         else:
-            # 'global' mode - just acquire the per-attribute lock
-            # blocking and proceed.
+            # In 'global' mode, acquire the per-attribute lock blocking.
             lock.acquire()
 
         held = self._get_held_locks()
@@ -623,13 +624,11 @@ class Wiring:
         try:
             return self._instantiate_impl(name)
         finally:
-            # We hold the lock for a short time while creating the
-            # instance; keep it in place until the outermost caller
-            # releases it.
+            # Lock remains held until the outermost caller releases it.
             pass
 
     def _release_held_locks(self) -> None:
-        """Release all locks held by the current thread."""
+        """Release locks held by the current thread in LIFO order."""
         if not hasattr(self._local, "held_locks"):
             return
 
@@ -661,7 +660,7 @@ class Wiring:
                 )
             )
 
-        # Add constant properties (names present in _values but not in parsed)
+        # Add constant accessors (names present in _values but not in parsed)
         for name, value in self._values.items():
             if name in self._parsed:
                 continue
