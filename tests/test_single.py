@@ -23,17 +23,17 @@ def test_simple_load_constructor_args() -> None:
         }
     }
     wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-    instance = wired.yearsAgo
+    instance = wired.yearsAgo()
     assert isinstance(instance, datetime.datetime)
     assert instance.year == 2003
     assert instance.month == 12
     assert instance.day == 13
-    assert instance is wired.yearsAgo
+    assert instance is wired.yearsAgo()
 
 
 def test_simple_raise_on_nonexistent_wired_attribute() -> None:
     try:
-        apywire.Wiring({}, thread_safe=False).nonexistent
+        apywire.Wiring({}, thread_safe=False).nonexistent()
         assert False, "Should have raised AttributeError"
     except AttributeError as e:
         assert "no attribute 'nonexistent'" in str(e)
@@ -77,7 +77,6 @@ def test_simple_compile_constructor_args() -> None:
 
             class Compiled:
 
-                @property
                 def birthday(self):
                     if not hasattr(self, "_birthday"):
                         self._birthday = datetime.datetime(
@@ -93,13 +92,13 @@ def test_simple_compile_constructor_args() -> None:
     )
 
     class MockHasBirthday(Protocol):
-        birthday: datetime.datetime
+        def birthday(self) -> datetime.datetime: ...
 
     execd: dict[str, MockHasBirthday] = {}
     exec(pythonCode, execd)
     compiled = execd["compiled"]
 
-    instance = compiled.birthday
+    instance = compiled.birthday()
     assert isinstance(instance, datetime.datetime)
     assert instance.year == 1990
     assert instance.month == 12
@@ -146,7 +145,7 @@ def test_deep_module_paths() -> None:
     try:
         spec: apywire.Spec = {"foo.bar.baz.bat.SomeClass someModule": {}}
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-        instance = wired.someModule
+        instance = wired.someModule()
         assert isinstance(instance, SomeClass)
         assert instance.value == "deep mock"
 
@@ -160,7 +159,6 @@ def test_deep_module_paths() -> None:
 
             class Compiled:
 
-                @property
                 def someModule(self):
                     if not hasattr(self, "_someModule"):
                         self._someModule = foo.bar.baz.bat.SomeClass()
@@ -173,13 +171,13 @@ def test_deep_module_paths() -> None:
         assert expected == pythonCode
 
         class MockHasSomeModule(Protocol):
-            someModule: SomeClass
+            def someModule(self) -> SomeClass: ...
 
         # Test execution of compiled code
         execd: dict[str, MockHasSomeModule] = {}
         exec(pythonCode, execd)
         compiled: MockHasSomeModule = execd["compiled"]
-        instance = compiled.someModule
+        instance = compiled.someModule()
         assert isinstance(instance, SomeClass)
         assert instance.value == "deep mock"
     finally:
@@ -199,12 +197,12 @@ def test_simple_reuse_wired_variable() -> None:
         },
     }
     wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-    instance = wired.yearsAgo
+    instance = wired.yearsAgo()
     assert isinstance(instance, datetime.datetime)
     assert instance.year == 2003
     assert instance.month == 12
     assert instance.day == 13
-    assert instance is wired.yearsAgo
+    assert instance is wired.yearsAgo()
 
 
 def test_compile_constants_and_references() -> None:
@@ -227,15 +225,13 @@ def test_compile_constants_and_references() -> None:
 
             class Compiled:
 
-                @property
                 def yearsAgo(self):
                     if not hasattr(self, "_yearsAgo"):
                         self._yearsAgo = datetime.datetime(
-                            day=13, month=12, year=self.myYearValue
+                            day=13, month=12, year=self.myYearValue()
                         )
                     return self._yearsAgo
 
-                @property
                 def myYearValue(self):
                     return 2003
 
@@ -247,14 +243,14 @@ def test_compile_constants_and_references() -> None:
     )
 
     class CompiledMock(Protocol):
-        myYearValue: int
-        yearsAgo: datetime.datetime
+        def myYearValue(self) -> int: ...
+        def yearsAgo(self) -> datetime.datetime: ...
 
     execd: dict[str, CompiledMock] = {}
     exec(pythonCode, execd)
     compiled: CompiledMock = execd["compiled"]
-    assert compiled.myYearValue == 2003
-    instance = compiled.yearsAgo
+    assert compiled.myYearValue() == 2003
+    instance = compiled.yearsAgo()
     assert isinstance(instance, datetime.datetime)
     assert instance.year == 2003
 
@@ -282,15 +278,13 @@ def test_compile_inlines_mutated_values() -> None:
 
             class Compiled:
 
-                @property
                 def yearsAgo(self):
                     if not hasattr(self, "_yearsAgo"):
                         self._yearsAgo = datetime.datetime(
-                            day=13, month=12, year=self.myYearValue
+                            day=13, month=12, year=self.myYearValue()
                         )
                     return self._yearsAgo
 
-                @property
                 def myYearValue(self):
                     return 1999
 
@@ -338,16 +332,14 @@ def test_compile_uses_self_for_non_constants() -> None:
 
             class Compiled:
 
-                @property
                 def other(self):
                     if not hasattr(self, "_other"):
                         self._other = mymod.SomeClass()
                     return self._other
 
-                @property
                 def wrapper(self):
                     if not hasattr(self, "_wrapper"):
-                        self._wrapper = mymod.Wrapper(child=self.other)
+                        self._wrapper = mymod.Wrapper(child=self.other())
                     return self._wrapper
 
 
@@ -397,20 +389,20 @@ def test_placeholder_lazy_instantiation_singleton_runtime() -> None:
         assert SomeClass.inst_count == 0
 
         # Accessing the referenced value creates the instance
-        other = wired.other
+        other = wired.other()
         assert SomeClass.inst_count == 1
 
         # Accessing the wrapper should NOT cause another instantiation
         class HasChild(Protocol):
             child: SomeClass
 
-        wrapper: HasChild = cast(HasChild, wired.wrapper)
+        wrapper: HasChild = cast(HasChild, wired.wrapper())
         assert SomeClass.inst_count == 1
         assert wrapper.child is other
 
         # Re-accessing either should not increase instantiation count
-        _ = wired.wrapper
-        _ = wired.other
+        _ = wired.wrapper()
+        _ = wired.other()
         assert SomeClass.inst_count == 1
     finally:
         if "mymod2" in sys.modules:
@@ -459,26 +451,26 @@ def test_compiled_singleton_instantiation() -> None:
         exec(pythonCode, execd)
 
         class CompiledProt(Protocol):
-            other: SomeClass
-            wrapper: Wrapper
+            def other(self) -> SomeClass: ...
+            def wrapper(self) -> Wrapper: ...
 
         compiled: CompiledProt = cast(CompiledProt, execd["compiled"])
 
         assert SomeClass.inst_count == 0
 
-        other = compiled.other
+        other = compiled.other()
         # after accessing other, we should have one instantiation
         assert SomeClass.inst_count == 1
 
         # `compiled` is now typed via CompiledProt above
-        wrapper = compiled.wrapper
+        wrapper = compiled.wrapper()
         # wrapper access should not cause a second instantiation
         assert SomeClass.inst_count == 1
         assert wrapper.child is other
 
         # re-accessing compiled wrappers or values should not create more
-        _ = compiled.wrapper
-        _ = compiled.other
+        _ = compiled.wrapper()
+        _ = compiled.other()
         assert SomeClass.inst_count == 1
     finally:
         if "mymod3" in sys.modules:
@@ -525,9 +517,9 @@ def test_nested_structures_compiled_and_runtime() -> None:
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
 
         # Check runtime behavior
-        other_one = wired.one
-        other_two = wired.two
-        container: ListContainer = cast(ListContainer, wired.container)
+        other_one = wired.one()
+        other_two = wired.two()
+        container: ListContainer = cast(ListContainer, wired.container())
         assert container.items[0] is other_one
         assert container.items[1] is other_two
         assert container.items[2] == 3
@@ -542,18 +534,18 @@ def test_nested_structures_compiled_and_runtime() -> None:
         compiled_raw = execd["compiled"]
 
         class CompiledProt(Protocol):
-            one: Item
-            two: Item
-            container: ListContainer
+            def one(self) -> Item: ...
+            def two(self) -> Item: ...
+            def container(self) -> ListContainer: ...
 
         compiled: CompiledProt = cast(CompiledProt, compiled_raw)
-        assert compiled.one.value == 1
-        assert compiled.two.value == 2
-        compiled_container = compiled.container
-        assert compiled_container.items[0] is compiled.one
-        assert compiled_container.items[1] is compiled.two
+        assert compiled.one().value == 1
+        assert compiled.two().value == 2
+        compiled_container = compiled.container()
+        assert compiled_container.items[0] is compiled.one()
+        assert compiled_container.items[1] is compiled.two()
         assert compiled_container.items[2] == 3
-        assert compiled_container.lookup["a"] is compiled.one
+        assert compiled_container.lookup["a"] is compiled.one()
         assert compiled_container.lookup["b"] == 2
     finally:
         if "mymod4" in sys.modules:
@@ -564,7 +556,7 @@ def test_unknown_placeholder_raises() -> None:
     spec: apywire.Spec = {"datetime.datetime x": {"year": "{doesNotExist}"}}
     wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
     try:
-        _ = wired.x
+        _ = wired.x()
         assert (
             False
         ), "Should have raised UnknownPlaceholderError for unknown placeholder"
@@ -599,7 +591,7 @@ def test_circular_reference_raises() -> None:
         }
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
         try:
-            _ = wired.a
+            _ = wired.a()
             assert (
                 False
             ), "Should have raised CircularWiringError for circular dependency"
@@ -651,7 +643,7 @@ def test_unknown_placeholder_exception_during_creation() -> None:
         }
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
         try:
-            _ = wired.wrapper
+            _ = wired.wrapper()
             assert (
                 False
             ), "Should have raised WiringError due to creation error"

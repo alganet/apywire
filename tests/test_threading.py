@@ -42,7 +42,7 @@ def test_thread_safe_singleton_instantiation() -> None:
         results: list[object] = []
 
         def worker(i: int) -> None:
-            val = wired.singleton
+            val = wired.singleton()
             results.append(val)
 
         threads: list[threading.Thread] = []
@@ -96,7 +96,7 @@ def test_fallback_to_global_lock_avoids_double_instantiation() -> None:
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=True)
 
         def instantiate_b() -> None:
-            _ = wired.b
+            _ = wired.b()
 
         b_thread = threading.Thread(target=instantiate_b)
         b_thread.start()
@@ -110,7 +110,7 @@ def test_fallback_to_global_lock_avoids_double_instantiation() -> None:
         a_thread_result: list[object] = []
 
         def instantiate_a() -> None:
-            a_thread_result.append(wired.a)
+            a_thread_result.append(wired.a())
 
         a_thread = threading.Thread(target=instantiate_a)
         a_thread.start()
@@ -120,7 +120,7 @@ def test_fallback_to_global_lock_avoids_double_instantiation() -> None:
         a_thread.join(timeout=2)
 
         assert B.inst_count == 1
-        assert a_thread_result and a_thread_result[0] is wired.a
+        assert a_thread_result and a_thread_result[0] is wired.a()
     finally:
         if "mymod_fallback" in sys.modules:
             del sys.modules["mymod_fallback"]
@@ -176,7 +176,7 @@ def test_forced_per_attr_lock_failure_triggers_global_fallback(
         wired._attr_locks["a"] = cast(threading.RLock, fake)
         wired._attr_locks["b"] = threading.RLock()
 
-        val = wired.a
+        val = wired.a()
         assert isinstance(val, A)
         assert B.inst_count == 1
     finally:
@@ -229,7 +229,7 @@ def test_lock_retry_logic_with_eventual_success(
         lock = wired._get_attribute_lock("obj")
         lock.acquire(blocking=False)
 
-        result = wired.obj
+        result = wired.obj()
         assert isinstance(result, SomeClass)
         assert result.value == "success"
         assert call_count == 4  # 3 failures + 1 success
@@ -273,7 +273,7 @@ def test_lock_retry_logic_exceeds_max_attempts(
         lock.acquire(blocking=False)
 
         try:
-            _ = wired.obj
+            _ = wired.obj()
             assert False, "Should have raised WiringError"
         except apywire.WiringError as e:
             assert "failed to instantiate 'obj'" in str(e)
@@ -304,13 +304,13 @@ def test_non_threaded_mode_works() -> None:
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
 
         # Should instantiate successfully
-        result = wired.obj
+        result = wired.obj()
         assert isinstance(result, SomeClass)
         assert result.value == "test"
         assert SomeClass.inst_count == 1
 
         # Should return the same instance
-        result2 = wired.obj
+        result2 = wired.obj()
         assert result2 is result
         assert SomeClass.inst_count == 1
     finally:
@@ -344,7 +344,7 @@ def test_non_threaded_mode_circular_dependency() -> None:
         }
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
         try:
-            _ = wired.a
+            _ = wired.a()
             assert False, "Should have raised CircularWiringError"
         except apywire.CircularWiringError as e:
             assert "Circular wiring dependency detected" in str(e)
@@ -379,7 +379,7 @@ def test_threaded_mode_circular_dependency() -> None:
         }
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=True)
         try:
-            _ = wired.a
+            _ = wired.a()
             assert False, "Should have raised CircularWiringError"
         except apywire.CircularWiringError as e:
             assert "Circular wiring dependency detected" in str(e)
@@ -409,7 +409,7 @@ def test_optimistic_instantiation_exception_wrapping(
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=True)
 
         try:
-            _ = wired.obj
+            _ = wired.obj()
             assert False, "Should have raised WiringError"
         except apywire.WiringError as e:
             assert "failed to instantiate 'obj'" in str(e)
@@ -445,7 +445,7 @@ def test_release_held_locks_when_no_locks() -> None:
         wired._release_held_locks()
 
         # Should still work normally
-        result = wired.obj
+        result = wired.obj()
         assert isinstance(result, SomeClass)
     finally:
         if "mymod_no_locks" in sys.modules:
@@ -482,7 +482,7 @@ def test_wiring_error_rewrapping_in_optimistic_mode(
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=True)
 
         try:
-            _ = wired.outer
+            _ = wired.outer()
             assert False, "Should have raised WiringError"
         except apywire.WiringError as e:
             # Should be wrapped with context
