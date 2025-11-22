@@ -57,4 +57,4 @@ ext_modules = cythonize("apywire/wiring.py", force=True)
 if os.path.exists("apywire/wiring.c"):
     add_spdx_header("apywire/wiring.c")
 
-setup(ext_modules=ext_modules)
+setup(ext_modules=ext_modules, python_requires=">=3.12")

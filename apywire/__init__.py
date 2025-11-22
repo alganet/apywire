@@ -5,13 +5,19 @@
 """A package to wire up objects."""
 
 from .wiring import (
-    InstanceData,
+    CircularWiringError,
     Spec,
+    SpecEntry,
+    UnknownPlaceholderError,
     Wiring,
+    WiringError,
 )
 
 __all__ = [
-    "InstanceData",
     "Spec",
+    "SpecEntry",
     "Wiring",
+    "WiringError",
+    "UnknownPlaceholderError",
+    "CircularWiringError",
 ]
