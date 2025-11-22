@@ -4,15 +4,18 @@
 
 """A package to wire up objects."""
 
+from .exceptions import (
+    CircularWiringError,
+    LockUnavailableError,
+    UnknownPlaceholderError,
+    WiringError,
+)
 from .wiring import (
     Accessor,
     AioAccessor,
-    CircularWiringError,
     Spec,
     SpecEntry,
-    UnknownPlaceholderError,
     Wiring,
-    WiringError,
 )
 
 __all__ = [
@@ -22,6 +25,7 @@ __all__ = [
     "WiringError",
     "UnknownPlaceholderError",
     "CircularWiringError",
+    "LockUnavailableError",
     "Accessor",
     "AioAccessor",
 ]
