@@ -318,6 +318,42 @@ def test_non_threaded_mode_works() -> None:
             del sys.modules["mymod_nonthreaded"]
 
 
+def test_async_await_accessor_thread_safe() -> None:
+    import asyncio
+    import sys
+    from types import ModuleType
+
+    class SomeClass:
+        inst_count: int = 0
+
+        def __init__(self) -> None:
+            SomeClass.inst_count += 1
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("mymod_async_thread")
+            self.SomeClass = SomeClass
+
+    mod = MockModule()
+    sys.modules["mymod_async_thread"] = mod
+    try:
+        spec: apywire.Spec = {
+            "mymod_async_thread.SomeClass singleton": {},
+        }
+        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=True)
+
+        async def get() -> object:
+            return await wired.aio.singleton()
+
+        instance = asyncio.run(get())
+        assert isinstance(instance, SomeClass)
+        # Should be cached and reused
+        assert instance is wired.singleton()
+    finally:
+        if "mymod_async_thread" in sys.modules:
+            del sys.modules["mymod_async_thread"]
+
+
 def test_non_threaded_mode_circular_dependency() -> None:
     """Test that circular dependency detection works in non-threaded mode."""
 

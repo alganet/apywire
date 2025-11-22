@@ -8,15 +8,18 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import importlib
 import threading
 import time
 from types import EllipsisType
 from typing import (
+    Awaitable,
     Callable,
     Literal,
     TypeAlias,
     cast,
+    final,
 )
 
 _ConstantValue: TypeAlias = (
@@ -278,15 +281,19 @@ class Wiring:
             return tuple(self._resolve_runtime(v, context=context) for v in o)
         return o
 
-    def _astify(self, obj: _ResolvedValue) -> ast.expr:
+    def _astify(self, obj: _ResolvedValue, aio: bool = False) -> ast.expr:
         """Convert a Python object (possibly a `_WiredRef`) to AST.
 
         Nested lists, tuples and dicts are supported. `_WiredRef` becomes
         an accessor call (`self.<name>()`) to mirror runtime behavior.
+
+        If ``aio`` is True, `_WiredRef` becomes an awaited accessor
+        (`await self.<name>()`) to reflect the asynchronous compiled
+        code's behavior.
         """
         if isinstance(obj, _WiredRef):
             # Access the wired value via `self.name()` in compiled code.
-            return ast.Call(
+            call = ast.Call(
                 func=ast.Attribute(
                     value=ast.Name(id="self", ctx=ast.Load()),
                     attr=obj.name,
@@ -295,6 +302,9 @@ class Wiring:
                 args=[],
                 keywords=[],
             )
+            if aio:
+                return ast.Await(value=call)
+            return call
         if (
             isinstance(obj, (str, bytes, bool, int, float, complex))
             or obj is None
@@ -303,16 +313,16 @@ class Wiring:
             return ast.Constant(obj)
         if isinstance(obj, dict):
             keys = [ast.Constant(k) for k in obj.keys()]
-            values = [self._astify(v) for v in obj.values()]
+            values = [self._astify(v, aio=aio) for v in obj.values()]
             return ast.Dict(
                 keys=cast(list[ast.expr | None], keys),
                 values=values,
             )
         if isinstance(obj, list):
-            elts = [self._astify(v) for v in obj]
+            elts = [self._astify(v, aio=aio) for v in obj]
             return ast.List(elts=elts, ctx=ast.Load())
         if isinstance(obj, tuple):
-            elts = [self._astify(v) for v in obj]
+            elts = [self._astify(v, aio=aio) for v in obj]
             return ast.Tuple(elts=elts, ctx=ast.Load())
         return ast.Constant(cast(_ConstantValue, obj))
 
@@ -322,9 +332,17 @@ class Wiring:
         module_name: str,
         class_name: str,
         data: _ResolvedSpecMapping,
-    ) -> ast.FunctionDef:
+        *,
+        aio: bool = False,
+    ) -> ast.FunctionDef | ast.AsyncFunctionDef:
         """Build an AST FunctionDef for a cached accessor that returns
-        module.class(**data).
+        ``module.class(**data)``.
+
+        When ``aio`` is True this function will produce an
+        ``ast.AsyncFunctionDef`` that awaits referenced accessors and calls
+        the blocking constructor in an executor (``loop.run_in_executor``).
+        When ``aio`` is False it produces a standard synchronous
+        ``ast.FunctionDef``.
         """
         module_attr = ast.Attribute(
             value=ast.Name(id=module_name, ctx=ast.Load()),
@@ -332,8 +350,24 @@ class Wiring:
             ctx=ast.Load(),
         )
         kwargs: list[ast.keyword] = []
+        # Build either synchronous or async call and associated pre-steps
+        pre_statements: list[ast.stmt] = []
         for k, v in data.items():
-            kwargs.append(ast.keyword(k, value=self._astify(v)))
+            v_expr = self._astify(v, aio=aio)
+            if aio:
+                # Assign expression to local var to support awaiting
+                var_name = f"__val_{k}"
+                pre_statements.append(
+                    ast.Assign(
+                        targets=[ast.Name(id=var_name, ctx=ast.Store())],
+                        value=v_expr,
+                    )
+                )
+                kwargs.append(
+                    ast.keyword(k, value=ast.Name(id=var_name, ctx=ast.Load()))
+                )
+            else:
+                kwargs.append(ast.keyword(k, value=v_expr))
         call = ast.Call(func=module_attr, args=[], keywords=kwargs)
         cache_attr = f"_{name}"
         return_stmt = ast.Return(
@@ -354,51 +388,145 @@ class Wiring:
                 keywords=[],
             ),
         )
-        assign_cache = ast.Assign(
-            targets=[
-                ast.Attribute(
-                    value=ast.Name(id="self", ctx=ast.Load()),
-                    attr=cache_attr,
-                    ctx=ast.Store(),
+
+        if not aio:
+            assign_cache = ast.Assign(
+                targets=[
+                    ast.Attribute(
+                        value=ast.Name(id="self", ctx=ast.Load()),
+                        attr=cache_attr,
+                        ctx=ast.Store(),
+                    )
+                ],
+                value=call,
+            )
+        else:
+            # Async path: compute local values and call in executor.
+            loop_assign = ast.Assign(
+                targets=[ast.Name(id="loop", ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="asyncio", ctx=ast.Load()),
+                        attr="get_running_loop",
+                        ctx=ast.Load(),
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+            )
+            # Create a lambda that returns the class call expression
+            # referencing the precomputed locals
+            lambda_expr = ast.Lambda(
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[],
+                    vararg=None,
+                    kwarg=None,
+                    defaults=[],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                ),
+                body=call,
+            )
+            run_call = ast.Await(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="loop", ctx=ast.Load()),
+                        attr="run_in_executor",
+                        ctx=ast.Load(),
+                    ),
+                    args=[
+                        ast.Constant(value=None),
+                        lambda_expr,
+                    ],
+                    keywords=[],
                 )
-            ],
-            value=call,
+            )
+            assign_cache = ast.Assign(
+                targets=[
+                    ast.Attribute(
+                        value=ast.Name(id="self", ctx=ast.Load()),
+                        attr=cache_attr,
+                        ctx=ast.Store(),
+                    )
+                ],
+                value=run_call,
+            )
+        if_stmt_body = (
+            pre_statements + [loop_assign, assign_cache]
+            if aio
+            else [assign_cache]
         )
-        if_stmt = ast.If(test=has_check, body=[assign_cache], orelse=[])
-        func_def = ast.FunctionDef(
-            name=name,
-            args=_PROPERTY_ARGS,
-            body=[if_stmt, return_stmt],
-            decorator_list=[],
-            returns=None,
-            type_comment=None,
-            type_params=[],
-        )
+        if_stmt = ast.If(test=has_check, body=if_stmt_body, orelse=[])
+        func_def: ast.FunctionDef | ast.AsyncFunctionDef
+        if not aio:
+            func_def = ast.FunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=[if_stmt, return_stmt],
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
+        else:
+            func_def = ast.AsyncFunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=[if_stmt, return_stmt],
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
         return func_def
 
     def _compile_constant_property(
         self,
         name: str,
         value: _ConstantValue,
-    ) -> ast.FunctionDef:
+        *,
+        aio: bool = False,
+    ) -> ast.FunctionDef | ast.AsyncFunctionDef:
         """Return an AST FunctionDef for an accessor that returns a
         constant value.
+
+        When ``aio`` is True the compiled accessor will be an
+        ``async def`` that returns the constant directly (no executor
+        required), otherwise a synchronous ``def`` is emitted.
         """
         return_stmt = ast.Return(value=ast.Constant(value))
-        func_def = ast.FunctionDef(
-            name=name,
-            args=_PROPERTY_ARGS,
-            body=[return_stmt],
-            decorator_list=[],
-            returns=None,
-            type_comment=None,
-            type_params=[],
-        )
+        func_def: ast.FunctionDef | ast.AsyncFunctionDef
+        if not aio:
+            func_def = ast.FunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=[return_stmt],
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
+        else:
+            func_def = ast.AsyncFunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=[return_stmt],
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
         return func_def
 
-    def __getattr__(self, name: str) -> Callable[[], _RuntimeValue]:
+    def __getattr__(self, name: str) -> Callable[[], _RuntimeValue] | Accessor:
         """Return an accessor callable for `name` that returns the
         instantiated object for that name when invoked.
+
+        The returned accessor supports synchronous invocation via
+        callable `wired.name()`.
+        Use `await wired.aio.name()` to obtain the instantiated value
+        asynchronously.
         """
         # Return cached value (constant or already instantiated)
         if name in self._values:
@@ -413,46 +541,57 @@ class Wiring:
 
         self._check_circular_dependency(name)
 
-        # Create and return a bound accessor function that mirrors the
-        # behavior previously implemented in __getattr__ (including
-        # threading/locking behavior and exception wrapping).
-        def _accessor() -> _RuntimeValue:
-            # Fast non-thread-safe path
-            if not self._thread_safe:
-                self._get_resolving_stack().append(name)
-                try:
-                    try:
-                        return self._instantiate_impl(name)
-                    except (UnknownPlaceholderError, CircularWiringError):
-                        raise
-                    except WiringError as e:
-                        raise WiringError(
-                            f"failed to instantiate '{name}'"
-                        ) from e
-                    except Exception as e:
-                        raise WiringError(
-                            f"failed to instantiate '{name}'"
-                        ) from e
-                finally:
-                    self._get_resolving_stack().pop()
+        # Return a callable accessor object that mirrors the previous
+        # synchronous behavior. For asynchronous access use `wired.aio`.
+        return Accessor(self, name)
 
-            # Thread-safe mode: use locks and modes
-            stack = self._get_resolving_stack()
-            stack.append(name)
+    @property
+    def aio(self) -> "AioAccessor":
+        """Return a wrapper object providing async accessors.
+
+        Use `await wired.aio.name()` to obtain the instantiated value
+        asynchronously. We use `aio` to avoid the reserved keyword
+        `async` (so `wired.async` would be invalid syntax).
+        """
+        if not hasattr(self, "_aio_accessor"):
+            self._aio_accessor = AioAccessor(self)
+        return self._aio_accessor
+
+    def _access_impl(self, name: str) -> _RuntimeValue:
+        """Common implementation for synchronous accessors.
+
+        This contains the former logic that lived inside the accessor
+        closure and is reused by both the sync call and the async
+        executor wrapper.
+        """
+        # Fast non-thread-safe path
+        if not self._thread_safe:
+            self._get_resolving_stack().append(name)
             try:
-                lock = self._get_attribute_lock(name)
-                mode = (
-                    self._local.mode if hasattr(self._local, "mode") else None
-                )
-
-                if mode is None:
-                    return self._instantiate_top_level(name, lock)
-
-                return self._instantiate_nested(name, lock, mode)
+                try:
+                    return self._instantiate_impl(name)
+                except (UnknownPlaceholderError, CircularWiringError):
+                    raise
+                except WiringError as e:
+                    raise WiringError(f"failed to instantiate '{name}'") from e
+                except Exception as e:
+                    raise WiringError(f"failed to instantiate '{name}'") from e
             finally:
-                stack.pop()
+                self._get_resolving_stack().pop()
 
-        return _accessor
+        # Thread-safe mode: use locks and modes
+        stack = self._get_resolving_stack()
+        stack.append(name)
+        try:
+            lock = self._get_attribute_lock(name)
+            mode = self._local.mode if hasattr(self._local, "mode") else None
+
+            if mode is None:
+                return self._instantiate_top_level(name, lock)
+
+            return self._instantiate_nested(name, lock, mode)
+        finally:
+            stack.pop()
 
     def _check_circular_dependency(self, name: str) -> None:
         """Check for circular dependencies in the wiring graph.
@@ -636,8 +775,20 @@ class Wiring:
             lock.release()
         self._local.held_locks = []
 
-    def compile(self) -> str:
-        """Compiles the Spec into a string containing Python code."""
+    def compile(self, *, aio: bool = False) -> str:
+        """Compiles the Spec into a string containing Python code.
+
+        Args:
+            aio: If True, generate `async def` accessors for wired
+                attributes that await referenced attributes and call
+                blocking constructors in a threadpool via
+                `asyncio.get_running_loop().run_in_executor`. When False
+                (default) generate synchronous `def` accessors.
+
+        Returns:
+            A string containing the Python source for the compiled
+            `Compiled` container.
+        """
         # Build AST for the module
         body: list[ast.stmt] = []
 
@@ -645,6 +796,8 @@ class Wiring:
         modules = set()
         for module_name, _, _ in self._parsed.values():
             modules.add(module_name)
+        if aio:
+            modules.add("asyncio")
         for module in sorted(modules):
             body.append(ast.Import(names=[ast.alias(name=module)]))
 
@@ -657,6 +810,7 @@ class Wiring:
                     module_name,
                     class_name,
                     data,
+                    aio=aio,
                 )
             )
 
@@ -668,6 +822,7 @@ class Wiring:
                 self._compile_constant_property(
                     name,
                     cast(_ConstantValue, value),
+                    aio=aio,
                 )
             )
 
@@ -700,6 +855,63 @@ class Wiring:
 
         # Unparse to string
         return ast.unparse(module_ast)
+
+
+@final
+class Accessor:
+    """Callable accessor returned by `Wiring.__getattr__`.
+
+    Accessing `wired.name` returns an `Accessor` object which is
+    callable: `wired.name()` returns the instantiated object. If you
+    need async access, use `await wired.aio.name()`.
+    """
+
+    def __init__(self, wiring: Wiring, name: str) -> None:
+        self._wiring = wiring
+        self._name = name
+
+    def __call__(self) -> _RuntimeValue:
+        return self._wiring._access_impl(self._name)
+
+
+@final
+class AioAccessor:
+    """Wrapper used to return async callables via `wired.aio`.
+
+    Example: ``await wired.aio.name()`` will return the requested value
+    asynchronously. If ``name`` is a constant cached in ``_values`` the
+    accessor returns it directly (no executor is used). Otherwise the
+    synchronous instantiation is executed in a threadpool (``run_in_executor``)
+    and the instance is returned.
+    """
+
+    def __init__(self, wiring: Wiring) -> None:
+        self._wiring = wiring
+
+    def __getattr__(
+        self,
+        name: str,
+    ) -> Callable[[], Awaitable[_RuntimeValue]]:
+        # If we already have a cached value (constants and already-created
+        # instances), return an async function that returns it directly.
+        if name in self._wiring._values:
+
+            async def _quick() -> _RuntimeValue:
+                return self._wiring._values[name]
+
+            return _quick
+
+        # Unknown attributes should raise like the sync accessor.
+        if name not in self._wiring._parsed:
+            raise AttributeError(f"no attribute '{name}'")
+
+        async def _acall() -> _RuntimeValue:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None, self._wiring._access_impl, name
+            )
+
+        return _acall
 
 
 class _LockUnavailable(RuntimeError):
