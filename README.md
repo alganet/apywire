@@ -10,3 +10,7 @@ A Python package to wire up objects.
 ---
 
 Under development and unstable, API might change at any moment.
+
+## Development
+
+See [AGENTS.md](AGENTS.md) for coding guidelines and architecture overview.

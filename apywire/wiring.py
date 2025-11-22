@@ -11,13 +11,7 @@ import ast
 import asyncio
 import importlib
 from types import EllipsisType
-from typing import (
-    Awaitable,
-    Callable,
-    TypeAlias,
-    cast,
-    final,
-)
+from typing import Awaitable, Callable, TypeAlias, cast, final
 
 from apywire.exceptions import (
     CircularWiringError,
