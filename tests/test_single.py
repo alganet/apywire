@@ -564,6 +564,71 @@ def test_unknown_placeholder_raises() -> None:
         assert "Unknown placeholder 'doesNotExist'" in str(e)
 
 
+def test_async_await_accessor_simple() -> None:
+    import asyncio
+
+    spec: apywire.Spec = {
+        "datetime.datetime yearsAgo": {
+            "day": 13,
+            "month": 12,
+            "year": 2003,
+        }
+    }
+    wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
+
+    async def get() -> object:
+        return await wired.aio.yearsAgo()
+
+    instance = asyncio.run(get())
+    assert isinstance(instance, datetime.datetime)
+    assert instance.year == 2003
+    assert instance.month == 12
+    assert instance.day == 13
+    # Ensure subsequent sync access returns the same cached object
+    assert instance is wired.yearsAgo()
+
+
+def test_async_await_accessor_references() -> None:
+    import asyncio
+    import sys
+    from types import ModuleType
+
+    class SomeClass:
+        pass
+
+    class Wrapper:
+        def __init__(self, child: object) -> None:
+            self.child = child
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("mymod_async")
+            self.SomeClass = SomeClass
+            self.Wrapper = Wrapper
+
+    mod = MockModule()
+    sys.modules["mymod_async"] = mod
+    try:
+        spec: apywire.Spec = {
+            "mymod_async.SomeClass other": {},
+            "mymod_async.Wrapper wrapper": {"child": "{other}"},
+        }
+        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
+
+        async def get() -> object:
+            # Awaiting the async wrapper should resolve placeholders as well
+            return await wired.aio.wrapper()
+
+        wrapper = asyncio.run(get())
+        assert isinstance(wrapper, Wrapper)
+        assert isinstance(wrapper.child, SomeClass)
+        # Ensure the referenced instance is cached and reused
+        assert wrapper.child is wired.other()
+    finally:
+        if "mymod_async" in sys.modules:
+            del sys.modules["mymod_async"]
+
+
 def test_circular_reference_raises() -> None:
     import sys
     from types import ModuleType

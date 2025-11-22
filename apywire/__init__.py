@@ -5,6 +5,8 @@
 """A package to wire up objects."""
 
 from .wiring import (
+    Accessor,
+    AioAccessor,
     CircularWiringError,
     Spec,
     SpecEntry,
@@ -20,4 +22,6 @@ __all__ = [
     "WiringError",
     "UnknownPlaceholderError",
     "CircularWiringError",
+    "Accessor",
+    "AioAccessor",
 ]
