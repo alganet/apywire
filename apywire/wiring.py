@@ -47,7 +47,7 @@ _SpecValue: TypeAlias = (
     | str
     | list["_SpecValue"]
     | tuple["_SpecValue", ...]
-    | dict[str, "_SpecValue"]
+    | dict[str | int, "_SpecValue"]
 )
 
 # Resolved values are produced after parsing placeholders; strings of
@@ -58,7 +58,7 @@ _ResolvedValue: TypeAlias = (
     | _WiredRef
     | list["_ResolvedValue"]
     | tuple["_ResolvedValue", ...]
-    | dict[str, "_ResolvedValue"]
+    | dict[str | int, "_ResolvedValue"]
 )
 
 # Runtime values are the concrete types available at runtime —
@@ -68,14 +68,16 @@ _RuntimeValue: TypeAlias = (
     | _ConstantValue
     | list["_RuntimeValue"]
     | tuple["_RuntimeValue", ...]
-    | dict[str, "_RuntimeValue"]
+    | dict[str | int, "_RuntimeValue"]
 )
 
-_SpecMapping: TypeAlias = dict[str, _SpecValue]
+_SpecMapping: TypeAlias = dict[str | int, _SpecValue] | list["_SpecValue"]
 # Public alias to annotate an individual spec mapping entry.
 # Example: `def build(spec: apywire.SpecEntry) -> apywire.Spec: ...`
-SpecEntry: TypeAlias = dict[str, _SpecValue]
-_ResolvedSpecMapping: TypeAlias = dict[str, _ResolvedValue]
+SpecEntry: TypeAlias = dict[str | int, _SpecValue]
+_ResolvedSpecMapping: TypeAlias = (
+    dict[str | int, _ResolvedValue] | list["_ResolvedValue"]
+)
 Spec: TypeAlias = dict[str, _SpecMapping | _ConstantValue]
 
 # Type aliases for parsed spec entries
@@ -376,7 +378,41 @@ class Wiring(CompiledThreadSafeMixin):
                 )
             return node
 
-        for key, value in data.items():
+        args: list[ast.expr] = []
+
+        # Normalize data into args_data (list) and kwargs_data (dict)
+        args_data: list[_ResolvedValue] = []
+        kwargs_data: dict[str, _ResolvedValue] = {}
+
+        if isinstance(data, list):
+            args_data = data
+        else:
+            data_dict = data
+            int_keys = sorted(k for k in data_dict if isinstance(k, int))
+            str_keys = [k for k in data_dict if isinstance(k, str)]
+            for k_int in int_keys:
+                args_data.append(data_dict[k_int])
+            for k_str in str_keys:
+                kwargs_data[k_str] = data_dict[k_str]
+
+        # Process positional args
+        for i, value in enumerate(args_data):
+            raw_val_ast = self._astify(value, aio=aio)
+            if aio:
+                val_ast = _replace_awaits_with_locals(raw_val_ast)
+                var_name = f"__arg_{i}"
+                assign = ast.Assign(
+                    targets=[ast.Name(id=var_name, ctx=ast.Store())],
+                    value=val_ast,
+                )
+                pre_statements.append(assign)
+                arg_val: ast.expr = ast.Name(id=var_name, ctx=ast.Load())
+            else:
+                arg_val = raw_val_ast
+            args.append(arg_val)
+
+        # Process keyword args
+        for key, value in kwargs_data.items():
             raw_val_ast = self._astify(value, aio=aio)
             if aio:
                 # Replace any awaited accessors with local precomputed
@@ -396,8 +432,8 @@ class Wiring(CompiledThreadSafeMixin):
                 kw_val = raw_val_ast
             kwargs.append(ast.keyword(arg=key, value=kw_val))
 
-        # Build the actual constructor call (module.Class(**kwargs))
-        call = ast.Call(func=module_attr, args=[], keywords=kwargs)
+        # Build the actual constructor call (module.Class(*args, **kwargs))
+        call = ast.Call(func=module_attr, args=args, keywords=kwargs)
 
         # Cache attribute name like `_name` used to store instantiated
         # objects on `self` at runtime. The compiled accessor returns
@@ -800,12 +836,29 @@ class Wiring(CompiledThreadSafeMixin):
             Callable[..., object], getattr(module, class_name)
         )
 
-        # Build kwargs, resolving wired references to runtime objects
+        # Build args and kwargs, resolving wired references to runtime objects
+        args: list[_RuntimeValue] = []
         kwargs: dict[str, _RuntimeValue] = {}
-        for k, v in ins_data.items():
-            kwargs[k] = self._resolve_runtime(v, context=name)
 
-        instance = cls(**kwargs)
+        if isinstance(ins_data, list):
+            for v in ins_data:
+                args.append(self._resolve_runtime(v, context=name))
+        else:
+            ins_data_dict = ins_data
+            int_keys = sorted(k for k in ins_data_dict if isinstance(k, int))
+            str_keys = [k for k in ins_data_dict if isinstance(k, str)]
+
+            for k_int in int_keys:
+                args.append(
+                    self._resolve_runtime(ins_data_dict[k_int], context=name)
+                )
+
+            for k_str in str_keys:
+                kwargs[k_str] = self._resolve_runtime(
+                    ins_data_dict[k_str], context=name
+                )
+
+        instance = cls(*args, **kwargs)
         self._values[name] = instance
         return instance
 

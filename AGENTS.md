@@ -23,7 +23,7 @@ apywire is a Python 3.12+ library for lazy object wiring and dependency injectio
 - **Equivalence**: Compiled output behaves identically to runtime `Wiring` (lazy, async, thread-safe)
 
 ## Development Workflow
-- **Setup**: `make .venv && make pip` (venv + install deps)
+- **Setup**: `make .venv` and `source .venv/bin/activate`, then `make pip`
 - **Check**: `make all` (format, lint, coverage, build)
 - **Test**: `pytest -xvs` (verbose), `make coverage` (95% required)
 - **Build**: `make build` (Cython compile), `make dist` (package)
