@@ -21,13 +21,13 @@ reuse:
 	. .venv/bin/activate && make pip
 
 format: reuse
-	python -m black .
-	python -m isort .
+	python -m black apywire tests
+	python -m isort apywire tests
 
 lint:
 	python -m reuse lint
-	python -m flake8 .
-	python -m mypy .
+	python -m flake8 apywire tests
+	python -m mypy apywire tests
 
 test:
 	python -m pytest -q
