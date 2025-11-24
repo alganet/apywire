@@ -3,13 +3,27 @@
 # SPDX-License-Identifier: ISC
 
 
-"""Base wiring functionality."""
+"""Base wiring functionality.
+
+This module defines the core type system and base class for wiring
+containers:
+
+- _SpecValue: Raw values from user-provided spec (may include "{name}"
+              placeholders)
+- _ResolvedValue: After parsing, placeholders become _WiredRef markers
+- _RuntimeValue: Concrete instantiated objects at runtime
+"""
 
 from __future__ import annotations
 
 from types import EllipsisType
 from typing import TypeAlias, cast
 
+from apywire.constants import (
+    PLACEHOLDER_END,
+    PLACEHOLDER_START,
+    SPEC_KEY_DELIMITER,
+)
 from apywire.threads import ThreadLocalState
 
 _ConstantValue: TypeAlias = (
@@ -156,11 +170,11 @@ class WiringBase:
         self, key: str, value: _SpecMapping | _ConstantValue
     ) -> _UnresolvedParsedEntry | None:
         """Parse a spec entry. Returns None for constants."""
-        if " " not in key:
+        if SPEC_KEY_DELIMITER not in key:
             return None  # It's a constant
 
         # class wiring: "module.Class name"
-        type_str, name = key.rsplit(" ", 1)
+        type_str, name = key.rsplit(SPEC_KEY_DELIMITER, 1)
         parts = type_str.split(".")
         module_name = ".".join(parts[:-1])
         class_name = parts[-1]
@@ -172,6 +186,10 @@ class WiringBase:
 
         return (module_name, class_name, name, cast(_SpecMapping, value))
 
+    def _is_placeholder(self, s: str) -> bool:
+        """Check if a string is a placeholder reference like '{name}'."""
+        return s.startswith(PLACEHOLDER_START) and s.endswith(PLACEHOLDER_END)
+
     def _resolve(self, obj: _SpecValue) -> _ResolvedValue:
         """Resolve placeholders into `_WiredRef` markers for runtime.
 
@@ -179,8 +197,8 @@ class WiringBase:
         for later resolution.
         """
         if isinstance(obj, str):
-            if obj.startswith("{") and obj.endswith("}"):
-                ref_name = obj[1:-1]
+            if self._is_placeholder(obj):
+                ref_name = obj[len(PLACEHOLDER_START) : -len(PLACEHOLDER_END)]
                 return _WiredRef(ref_name)
             return obj
         if isinstance(obj, dict):

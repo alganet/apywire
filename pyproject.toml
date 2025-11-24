@@ -66,6 +66,7 @@ line_length = 79
 [tool.flake8]
 exclude = [".venv"]
 max-line-length = 79
+ignore = ["E203", "E704", "W503"]
 
 [tool.mypy]
 exclude = [".venv"]
