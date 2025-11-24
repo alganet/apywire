@@ -36,6 +36,13 @@ __all__ = [
 
 
 class _Constructor(Protocol):
+    """Protocol for callable constructors.
+
+    This protocol represents any callable that can be used as a class
+    constructor, accepting arbitrary positional and keyword arguments
+    and returning an instance of the constructed class.
+    """
+
     def __call__(self, *args: object, **kwargs: object) -> object: ...
 
 
@@ -132,11 +139,45 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
         self._values[name] = val
         return val
 
+    def _separate_args_kwargs(
+        self, data: dict[str | int, object]
+    ) -> tuple[list[object], dict[str, object]]:
+        """Separate positional args (int keys) from keyword args (str keys).
+
+        Args:
+            data: Dictionary with mixed int and str keys
+
+        Returns:
+            Tuple of (positional_args, keyword_args)
+        """
+        args_list: list[tuple[int, object]] = []
+        kwargs_dict: dict[str, object] = {}
+
+        for k, v in data.items():
+            if isinstance(k, int):
+                args_list.append((k, v))
+            else:
+                kwargs_dict[k] = v
+
+        # Sort positional args by index
+        def _sort_key(item: tuple[int, object]) -> int:
+            return item[0]
+
+        args_list.sort(key=_sort_key)
+        pos_args = [v for _, v in args_list]
+
+        return (pos_args, kwargs_dict)
+
     def _instantiate_impl(self, name: str) -> _RuntimeValue:
         """Internal implementation of instantiation logic.
 
         This method is called by _instantiate_attr (via the maker lambda)
         to actually create the object if it's not cached.
+
+        Positional Arguments Support:
+        When the spec contains integer keys (e.g., {0: value, 1: value}),
+        these are treated as positional arguments and are separated from
+        keyword arguments before calling the constructor.
         """
         # Check for circular dependencies
         stack = self._get_resolving_stack()
@@ -169,21 +210,7 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
                 if isinstance(kwargs, dict):
                     # Separate positional args (int keys) from keyword args
                     # (str keys)
-                    args_list: list[tuple[int, object]] = []
-                    kwargs_dict: dict[str, object] = {}
-                    for k, v in kwargs.items():
-                        if isinstance(k, int):
-                            args_list.append((k, v))
-                        else:
-                            kwargs_dict[k] = v
-
-                    # Sort positional args by index
-                    def _sort_key(item: tuple[int, object]) -> int:
-                        return item[0]
-
-                    args_list.sort(key=_sort_key)
-                    pos_args = [v for _, v in args_list]
-
+                    pos_args, kwargs_dict = self._separate_args_kwargs(kwargs)
                     instance = cls(*pos_args, **kwargs_dict)
                 elif isinstance(kwargs, list):
                     # All positional arguments

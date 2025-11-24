@@ -15,6 +15,7 @@ import threading
 import time
 from typing import Callable, Literal, NoReturn, cast
 
+from apywire.constants import CACHE_ATTR_PREFIX
 from apywire.exceptions import LockUnavailableError
 
 
@@ -105,8 +106,7 @@ class CompiledThreadSafeMixin:
 
         if isinstance(e, (UnknownPlaceholderError, CircularWiringError)):
             raise
-        if isinstance(e, WiringError):
-            raise WiringError(f"failed to instantiate '{name}'") from e
+        # All other exceptions (including WiringError) are wrapped
         raise WiringError(f"failed to instantiate '{name}'") from e
 
     def _instantiate_attr(
@@ -119,7 +119,7 @@ class CompiledThreadSafeMixin:
         thread-safe locking logic permits it to run. Returns the cached
         attribute (``self._<name>``) if already present.
         """
-        cache_attr = f"_{name}"
+        cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
         # check cache mapping or attribute
         if hasattr(self, "_values") and name in self._values:
             return self._values[name]
@@ -129,7 +129,9 @@ class CompiledThreadSafeMixin:
         lock = self._get_attribute_lock(name)
         mode: str | None = getattr(self._local, "mode", None)
         if mode is None:
-            # Optimistic per-attribute lock
+            # Optimistic locking: Try to acquire per-attribute lock without
+            # blocking. If successful, instantiate in optimistic mode.
+            # If not, fall back to global lock.
             if lock.acquire(blocking=False):
                 try:
                     if hasattr(self, cache_attr):
@@ -162,6 +164,7 @@ class CompiledThreadSafeMixin:
                         self._release_held_locks()
                         return inst
                 finally:
+                    # Clean up optimistic mode when exiting top-level call
                     if (
                         cast(
                             Literal["optimistic", "global"] | None,
@@ -205,7 +208,9 @@ class CompiledThreadSafeMixin:
                     self._release_held_locks()
                     self._local.mode = None
         else:
-            # Nested invocation; use per-attr lock or global based on mode
+            # Nested invocation within an existing instantiation:
+            # Use per-attr lock in optimistic mode or global lock if already
+            # in global mode
             if mode == "optimistic":
                 if not lock.acquire(blocking=False):
                     raise LockUnavailableError()
@@ -223,6 +228,7 @@ class CompiledThreadSafeMixin:
                     setattr(self, cache_attr, inst)
                 return inst
             finally:
-                # Intentionally do not release locks here to keep them held
-                # for nested instantiations.
+                # Locks are intentionally not released here; they will be
+                # released by the top-level caller that initiated the
+                # instantiation chain
                 pass

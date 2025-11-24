@@ -11,6 +11,11 @@ import ast
 from types import EllipsisType
 from typing import cast
 
+from apywire.constants import (
+    CACHE_ATTR_PREFIX,
+    COMPILED_ARG_PREFIX,
+    COMPILED_VAR_PREFIX,
+)
 from apywire.wiring import (
     WiringBase,
     _ConstantValue,
@@ -128,7 +133,7 @@ class WiringCompiler(WiringBase):
                 ):
                     # produce a unique variable name and precompute the await
                     counter += 1
-                    var_name = f"__val_{counter}"
+                    var_name = f"{COMPILED_VAR_PREFIX}{counter}"
                     assign = ast.Assign(
                         targets=[ast.Name(id=var_name, ctx=ast.Store())],
                         value=node,
@@ -192,7 +197,7 @@ class WiringCompiler(WiringBase):
             raw_val_ast = self._astify(value, aio=aio)
             if aio:
                 val_ast = _replace_awaits_with_locals(raw_val_ast)
-                var_name = f"__arg_{i}"
+                var_name = f"{COMPILED_ARG_PREFIX}{i}"
                 assign = ast.Assign(
                     targets=[ast.Name(id=var_name, ctx=ast.Store())],
                     value=val_ast,
@@ -213,7 +218,7 @@ class WiringCompiler(WiringBase):
                 val_ast = _replace_awaits_with_locals(raw_val_ast)
                 # Use named variables for top-level keyword args to make
                 # the generated code more readable and deterministic.
-                var_name = f"__val_{key}"
+                var_name = f"{COMPILED_VAR_PREFIX}{key}"
                 assign = ast.Assign(
                     targets=[ast.Name(id=var_name, ctx=ast.Store())],
                     value=val_ast,
@@ -230,7 +235,7 @@ class WiringCompiler(WiringBase):
         # Cache attribute name like `_name` used to store instantiated
         # objects on `self` at runtime. The compiled accessor returns
         # `self._name` when present.
-        cache_attr = f"_{name}"
+        cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
 
         # if not hasattr(self, '_name'): ...
         has_check = ast.UnaryOp(
