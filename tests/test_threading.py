@@ -458,8 +458,13 @@ def test_optimistic_instantiation_exception_wrapping(
             assert "failed to instantiate 'obj'" in str(e)
             # Check the cause chain
             assert e.__cause__ is not None
-            assert isinstance(e.__cause__, ValueError)
-            assert "Intentional failure" in str(e.__cause__)
+            # Unwrap potential double wrapping
+            cause: BaseException | None = e.__cause__
+            if isinstance(cause, apywire.WiringError):
+                cause = cause.__cause__
+            assert cause is not None
+            assert isinstance(cause, ValueError)
+            assert "Intentional failure" in str(cause)
     finally:
         if "mymod_fail_opt" in sys.modules:
             del sys.modules["mymod_fail_opt"]
@@ -559,8 +564,9 @@ def test_compiled_thread_safe_singleton_instantiation_sync() -> None:
         spec: apywire.Spec = {
             "mymod_compiled_thread.SomeClass singleton": {},
         }
-        wired = apywire.Wiring(spec, thread_safe=False)
-        pythonCode = wired.compile(thread_safe=True)
+        pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
+            thread_safe=True
+        )
         execd: dict[str, object] = {}
         exec(pythonCode, execd)
         compiled_obj = cast(SyncSingletonProtocol, execd["compiled"])
@@ -604,8 +610,9 @@ def test_compiled_thread_safe_singleton_instantiation_async() -> None:
         spec: apywire.Spec = {
             "mymod_compiled_thread_async.SomeClass singleton": {},
         }
-        wired = apywire.Wiring(spec, thread_safe=False)
-        pythonCode = wired.compile(aio=True, thread_safe=True)
+        pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
+            aio=True, thread_safe=True
+        )
         execd: dict[str, object] = {}
         exec(pythonCode, execd)
         compiled_obj = cast(AsyncSingletonProtocol, execd["compiled"])

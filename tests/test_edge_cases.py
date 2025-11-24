@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from apywire.exceptions import LockUnavailableError, WiringError
-from apywire.thread_safety import CompiledThreadSafeMixin
+from apywire.threads import CompiledThreadSafeMixin
 
 
 class MockContainer(CompiledThreadSafeMixin):
@@ -221,12 +221,11 @@ def test_wiring_resolving_stack_non_thread_safe() -> None:
 
 def test_compile_constant_aio() -> None:
     """Test _compile_constant_property with aio=True."""
-    from apywire import Spec, Wiring
+    from apywire import Spec, WiringCompiler
 
-    wired = Wiring(cast(Spec, {"const": 42}), thread_safe=False)
-    # We can't easily call _compile_constant_property directly as it returns
-    # AST. But we can compile the whole thing and inspect the result.
-    code = wired.compile(aio=True)
+    code = WiringCompiler(
+        cast(Spec, {"const": 42}), thread_safe=False
+    ).compile(aio=True)
     # Verify it contains an async def for the constant
     assert "async def const(self):" in code
     assert "return 42" in code
@@ -238,7 +237,7 @@ def test_compile_aio_threaded_full_output() -> None:
 
     import black
 
-    from apywire import Spec, Wiring
+    from apywire import Spec, WiringCompiler
 
     spec: Spec = {
         "datetime.datetime birthday": {
@@ -247,8 +246,9 @@ def test_compile_aio_threaded_full_output() -> None:
             "year": 1990,
         }
     }
-    wired = Wiring(spec, thread_safe=True)
-    code = wired.compile(aio=True, thread_safe=True)
+    code = WiringCompiler(spec, thread_safe=True).compile(
+        aio=True, thread_safe=True
+    )
 
     # Format with black to match expected output
     mode = black.FileMode(line_length=79 - 12)  # Match test_compile_aio.py
@@ -257,7 +257,7 @@ def test_compile_aio_threaded_full_output() -> None:
     expected = dedent(
         """\
         from apywire.exceptions import LockUnavailableError
-        from apywire.thread_safety import CompiledThreadSafeMixin
+        from apywire.threads import CompiledThreadSafeMixin
         import asyncio
         import datetime
 
@@ -299,7 +299,7 @@ def test_compile_complex_ast_replacement() -> None:
     import sys
     from types import ModuleType
 
-    from apywire import Spec, Wiring
+    from apywire import Spec, WiringCompiler
 
     # Mock module
     class MockMod(ModuleType):
@@ -316,8 +316,7 @@ def test_compile_complex_ast_replacement() -> None:
             },
             "complex_ast.func leaf": {},
         }
-        wired = Wiring(spec, thread_safe=False)
-        code = wired.compile(aio=True)
+        code = WiringCompiler(spec, thread_safe=False).compile(aio=True)
 
         assert "async def root(self):" in code
         assert "__val_1 =" in code
@@ -452,7 +451,7 @@ def test_compile_ast_recursion_call_tuple() -> None:
     import sys
     from types import ModuleType
 
-    from apywire import Spec, Wiring
+    from apywire import Spec, WiringCompiler
 
     class MockMod(ModuleType):
         def func(self, *args: object, **kwargs: object) -> tuple[object, ...]:
@@ -471,8 +470,7 @@ def test_compile_ast_recursion_call_tuple() -> None:
         # wired.compile calls _astify which produces these nodes.
         # Then _replace_awaits_with_locals traverses them.
 
-        wired = Wiring(spec, thread_safe=False)
-        code = wired.compile(aio=True)
+        code = WiringCompiler(spec, thread_safe=False).compile(aio=True)
 
         # Verify code generation handles AST recursion correctly
         assert "async def wrapper(self):" in code

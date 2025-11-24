@@ -56,8 +56,7 @@ def test_stdlib_date_args() -> None:
 def test_compile_list_args() -> None:
     """Test compilation of list arguments."""
     spec: apywire.Spec = {"builtins.int myInt": [99]}
-    wired = apywire.Wiring(spec)
-    code = wired.compile()
+    code = apywire.WiringCompiler(spec).compile()
 
     execd: dict[str, object] = {}
     exec(code, execd)
@@ -71,8 +70,7 @@ def test_compile_list_args() -> None:
 def test_compile_mixed_args() -> None:
     """Test compilation of mixed numeric/string keys."""
     spec: apywire.Spec = {"builtins.complex myComplex": {0: 1.0, "imag": 2.0}}
-    wired = apywire.Wiring(spec)
-    code = wired.compile()
+    code = apywire.WiringCompiler(spec).compile()
 
     execd: dict[str, object] = {}
     exec(code, execd)

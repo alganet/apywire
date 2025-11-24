@@ -6,7 +6,7 @@ import ast
 import threading
 
 import apywire
-from apywire.wiring import _WiredRef
+from apywire.wiring import _ResolvedValue, _WiredRef
 
 
 def test_resolve_string_and_tuple_returning_expected_types() -> None:
@@ -37,7 +37,7 @@ def test_resolve_runtime_tuple_resolves_wiredrefs_to_values() -> None:
 
 
 def test_astify_tuple_and_fallback_to_constant() -> None:
-    w = apywire.Wiring({}, thread_safe=False)
+    w = apywire.WiringCompiler({}, thread_safe=False)
     # Tuple containing WiredRef, string, and int should return ast.Tuple
     node = w._astify((_WiredRef("x"), "s", 1))
     assert isinstance(node, ast.Tuple)
@@ -55,8 +55,6 @@ def test_astify_tuple_and_fallback_to_constant() -> None:
     d = Dummy()
     # We're intentionally testing the fallback behavior with an invalid type
     from typing import cast
-
-    from apywire.wiring import _ResolvedValue
 
     const_node = w._astify(cast(_ResolvedValue, d))
     assert isinstance(const_node, ast.Constant)
