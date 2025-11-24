@@ -40,8 +40,7 @@ def test_simple_raise_on_nonexistent_wired_attribute() -> None:
 
 
 def test_empty_class_compiled() -> None:
-    wired: apywire.Wiring = apywire.Wiring({}, thread_safe=False)
-    pythonCode = wired.compile()
+    pythonCode = apywire.WiringCompiler({}, thread_safe=False).compile()
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
     assert (
         dedent(
@@ -66,8 +65,7 @@ def test_simple_compile_constructor_args() -> None:
         }
     }
 
-    wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-    pythonCode = wired.compile()
+    pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
     assert (
         dedent(
@@ -150,7 +148,7 @@ def test_deep_module_paths() -> None:
         assert instance.value == "deep mock"
 
         # Test compilation
-        pythonCode = wired.compile()
+        pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
         pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
         expected = dedent(
             """\
@@ -214,8 +212,7 @@ def test_compile_constants_and_references() -> None:
             "year": "{myYearValue}",
         },
     }
-    wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-    pythonCode = wired.compile()
+    pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
     assert (
         dedent(
@@ -265,10 +262,10 @@ def test_compile_inlines_mutated_values() -> None:
             "year": "{myYearValue}",
         },
     }
-    wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
+    compiler = apywire.WiringCompiler(spec, thread_safe=False)
     # Mutate the cached value directly and ensure compile picks it up
-    wired._values["myYearValue"] = 1999
-    pythonCode = wired.compile()
+    compiler._values["myYearValue"] = 1999
+    pythonCode = compiler.compile()
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
     assert (
         dedent(
@@ -322,8 +319,7 @@ def test_compile_uses_self_for_non_constants() -> None:
             "mymod.SomeClass other": {},
             "mymod.Wrapper wrapper": {"child": "{other}"},
         }
-        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-        pythonCode = wired.compile()
+        pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
         pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
         expected = dedent(
             """\
@@ -441,8 +437,7 @@ def test_compiled_singleton_instantiation() -> None:
             "mymod3.SomeClass other": {},
             "mymod3.Wrapper wrapper": {"child": "{other}"},
         }
-        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-        pythonCode = wired.compile()
+        pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
         pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
 
         # No instantiation before executing compiled code
@@ -527,7 +522,7 @@ def test_nested_structures_compiled_and_runtime() -> None:
         assert container.lookup["b"] == 2
 
         # Check compiled behavior mirrors runtime
-        pythonCode = wired.compile()
+        pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
         pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
         execd: dict[str, object] = {}
         exec(pythonCode, execd)

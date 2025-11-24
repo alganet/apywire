@@ -23,8 +23,9 @@ def test_aio_compile_constructor_args() -> None:
             "year": 1990,
         }
     }
-    wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-    pythonCode = wired.compile(aio=True)
+    pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
+        aio=True
+    )
     execd: dict[str, object] = {}
     exec(pythonCode, execd)
     compiled = execd["compiled"]
@@ -69,8 +70,9 @@ def test_aio_compile_references_and_caching() -> None:
             "mymod_async_c.SomeClass other": {},
             "mymod_async_c.Wrapper wrapper": {"child": "{other}"},
         }
-        wired = apywire.Wiring(spec, thread_safe=False)
-        pythonCode = wired.compile(aio=True)
+        pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
+            aio=True
+        )
         execd: dict[str, object] = {}
         exec(pythonCode, execd)
 
@@ -140,10 +142,10 @@ def test_aio_compile_nested_structures() -> None:
                 "lookup": {"a": "{one}", "b": 2},
             },
         }
-        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-
         # Check compiled aio behavior
-        pythonCode = wired.compile(aio=True)
+        pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
+            aio=True
+        )
         execd: dict[str, object] = {}
         exec(pythonCode, execd)
         compiled_raw = execd["compiled"]
@@ -188,8 +190,9 @@ def test_aio_compile_constructor_args_source() -> None:
             "year": 1990,
         }
     }
-    wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-    pythonCode = wired.compile(aio=True)
+    pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
+        aio=True
+    )
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
     assert (
         dedent(
@@ -250,9 +253,8 @@ def test_aio_accessor_constant_not_run_in_executor(
 def test_compile_aio_list_args() -> None:
     """Test async compilation of list arguments."""
     spec: apywire.Spec = {"builtins.int myInt": [99]}
-    wired = apywire.Wiring(spec)
     # Compile with aio=True
-    code = wired.compile(aio=True)
+    code = apywire.WiringCompiler(spec).compile(aio=True)
 
     execd: dict[str, object] = {"asyncio": asyncio}
     exec(code, execd)
@@ -270,8 +272,7 @@ def test_compile_aio_list_args() -> None:
 def test_compile_aio_mixed_args() -> None:
     """Test async compilation of mixed numeric/string keys."""
     spec: apywire.Spec = {"builtins.complex myComplex": {0: 1.0, "imag": 2.0}}
-    wired = apywire.Wiring(spec)
-    code = wired.compile(aio=True)
+    code = apywire.WiringCompiler(spec).compile(aio=True)
 
     execd: dict[str, object] = {"asyncio": asyncio}
     exec(code, execd)

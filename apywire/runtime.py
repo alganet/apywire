@@ -1,0 +1,294 @@
+# SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
+#
+# SPDX-License-Identifier: ISC
+
+
+"""Core wiring functionality."""
+
+from __future__ import annotations
+
+import asyncio
+import importlib
+from typing import Awaitable, Callable, Protocol, cast, final
+
+from apywire.exceptions import (
+    CircularWiringError,
+    UnknownPlaceholderError,
+    WiringError,
+)
+from apywire.threads import CompiledThreadSafeMixin
+from apywire.wiring import (
+    Spec,
+    SpecEntry,
+    WiringBase,
+    _ResolvedValue,
+    _RuntimeValue,
+    _WiredRef,
+)
+
+__all__ = [
+    "WiringRuntime",
+    "Accessor",
+    "AioAccessor",
+    "Spec",
+    "SpecEntry",
+]
+
+
+class _Constructor(Protocol):
+    def __call__(self, *args: object, **kwargs: object) -> object: ...
+
+
+class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
+    """Runtime container for wired objects.
+
+    This class handles the runtime resolution and instantiation of wired
+    objects. It does NOT support compilation; use `WiringCompiler` for that.
+    """
+
+    def __init__(
+        self,
+        spec: Spec,
+        *,
+        thread_safe: bool = False,
+        max_lock_attempts: int = 10,
+        lock_retry_sleep: float = 0.01,
+    ) -> None:
+        """Initialize a WiringRuntime container.
+
+        Args:
+            spec: The wiring spec mapping.
+            thread_safe: Enable thread-safe instantiation (default: False).
+            max_lock_attempts: Max retries in global lock mode
+                               (only when thread_safe=True).
+            lock_retry_sleep: Sleep time in seconds between lock retries
+                               (only when thread_safe=True).
+        """
+        super().__init__(
+            spec,
+            thread_safe=thread_safe,
+            max_lock_attempts=max_lock_attempts,
+            lock_retry_sleep=lock_retry_sleep,
+        )
+
+    def _init_thread_safety(
+        self,
+        max_lock_attempts: int = 10,
+        lock_retry_sleep: float = 0.01,
+    ) -> None:
+        """Initialize thread safety mixin."""
+        CompiledThreadSafeMixin._init_thread_safety(
+            self, max_lock_attempts, lock_retry_sleep
+        )
+
+    def _get_resolving_stack(self) -> list[str]:
+        """Return the resolving stack for the current context."""
+        if self._thread_safe:
+            return CompiledThreadSafeMixin._get_resolving_stack(self)
+        return self._resolving_stack
+
+    def __getattr__(self, name: str) -> Accessor:
+        """Return a callable accessor for the named wired object."""
+        # If the name is in our parsed spec or constants, return an accessor.
+        if name in self._parsed or name in self._values:
+            return Accessor(self, name)
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
+
+    @property
+    def aio(self) -> "AioAccessor":
+        """Return a wrapper object providing async accessors.
+
+        Use `await wired.aio.name()` to obtain the instantiated value
+        asynchronously. We use `aio` to avoid the reserved keyword
+        `async` (so `wired.async` would be invalid syntax).
+        """
+        if not hasattr(self, "_aio_accessor"):
+            self._aio_accessor = AioAccessor(self)
+        return self._aio_accessor
+
+    def _instantiate_attr(
+        self,
+        name: str,
+        maker: Callable[[], object],
+    ) -> object:
+        """Instantiate an attribute using the configured strategy.
+
+        If thread_safe is True, uses the CompiledThreadSafeMixin implementation
+        which handles optimistic locking and global fallback.
+        If thread_safe is False, uses a simple direct instantiation.
+        """
+        if self._thread_safe:
+            # Use the mixin's implementation which handles locking
+            return CompiledThreadSafeMixin._instantiate_attr(self, name, maker)
+
+        # Non-thread-safe path: simple check and set
+        if name in self._values:
+            return self._values[name]
+
+        # No locking needed
+        val = maker()
+        self._values[name] = val
+        return val
+
+    def _instantiate_impl(self, name: str) -> _RuntimeValue:
+        """Internal implementation of instantiation logic.
+
+        This method is called by _instantiate_attr (via the maker lambda)
+        to actually create the object if it's not cached.
+        """
+        # Check for circular dependencies
+        stack = self._get_resolving_stack()
+        if name in stack:
+            raise CircularWiringError(
+                f"Circular wiring dependency detected: "
+                f"{' -> '.join(stack)} -> {name}"
+            )
+
+        stack.append(name)
+        try:
+            if name in self._values:
+                return self._values[name]
+
+            if name not in self._parsed:
+                # Should have been caught by __getattr__ or _resolve_runtime,
+                # but just in case.
+                raise UnknownPlaceholderError(
+                    f"Unknown placeholder '{name}' referenced."
+                )
+
+            module_name, class_name, data = self._parsed[name]
+            module = importlib.import_module(module_name)
+            cls = cast(_Constructor, getattr(module, class_name))
+
+            # Resolve arguments
+            kwargs = self._resolve_runtime(data, context=name)
+
+            try:
+                if isinstance(kwargs, dict):
+                    # Separate positional args (int keys) from keyword args
+                    # (str keys)
+                    args_list: list[tuple[int, object]] = []
+                    kwargs_dict: dict[str, object] = {}
+                    for k, v in kwargs.items():
+                        if isinstance(k, int):
+                            args_list.append((k, v))
+                        else:
+                            kwargs_dict[k] = v
+
+                    # Sort positional args by index
+                    def _sort_key(item: tuple[int, object]) -> int:
+                        return item[0]
+
+                    args_list.sort(key=_sort_key)
+                    pos_args = [v for _, v in args_list]
+
+                    instance = cls(*pos_args, **kwargs_dict)
+                elif isinstance(kwargs, list):
+                    # All positional arguments
+                    instance = cls(*kwargs)
+                else:
+                    # Should not happen given _ResolvedSpecMapping type,
+                    # but for safety
+                    instance = cls(kwargs)
+            except Exception as e:
+                raise WiringError(
+                    f"failed to instantiate '{name}': {e}"
+                ) from e
+
+            return instance
+        finally:
+            stack.pop()
+
+    def _resolve_runtime(
+        self,
+        o: _ResolvedValue,
+        context: str | None = None,
+    ) -> _RuntimeValue:
+        """Recursively resolve values at runtime.
+
+        Converts `_WiredRef` placeholders into actual objects by calling
+        their accessors.
+        """
+        if isinstance(o, _WiredRef):
+            # Detect when a placeholder reference points to something that
+            # wasn't defined in the spec. This is an unknown placeholder
+            # and should raise a friendly error.
+            if o.name not in self._values and o.name not in self._parsed:
+                ctx = f" while instantiating '{context}'" if context else ""
+                raise UnknownPlaceholderError(
+                    f"Unknown placeholder '{o.name}' referenced{ctx}."
+                )
+            # Membership check ensures `o.name` is known; if getattr raises
+            # AttributeError it's from instance creation — let it propagate.
+            # Call the accessor `self.name()` to get the runtime value.
+            return cast(object, getattr(self, o.name)())
+
+        if isinstance(o, dict):
+            return {k: self._resolve_runtime(v, context) for k, v in o.items()}
+        if isinstance(o, list):
+            return [self._resolve_runtime(v, context) for v in o]
+        if isinstance(o, tuple):
+            return tuple(self._resolve_runtime(v, context) for v in o)
+        return o
+
+
+@final
+class Accessor:
+    """A callable object that retrieves a wired value."""
+
+    def __init__(self, wiring: WiringRuntime, name: str) -> None:
+        self._wiring = wiring
+        self._name = name
+
+    def __call__(self) -> object:
+        """Return the wired object, instantiating it if necessary."""
+        # Fast path: check if already instantiated and cached in _values
+        # or as an attribute on the instance.
+        # We check _values first as it is the canonical storage.
+        if self._name in self._wiring._values:
+            return self._wiring._values[self._name]
+
+        # Not cached, so we need to instantiate it.
+        # We use _instantiate_attr which handles thread safety if enabled.
+        return self._wiring._instantiate_attr(
+            self._name, lambda: self._wiring._instantiate_impl(self._name)
+        )
+
+
+@final
+class AioAccessor:
+    """Helper for accessing wired objects asynchronously."""
+
+    def __init__(self, wiring: WiringRuntime) -> None:
+        self._wiring = wiring
+
+    def __getattr__(self, name: str) -> Callable[[], Awaitable[object]]:
+        """Return an async callable for the named wired object."""
+        # Check if valid name
+        if (
+            name not in self._wiring._parsed
+            and name not in self._wiring._values
+        ):
+            raise AttributeError(
+                f"'{type(self._wiring).__name__}' object has no attribute "
+                f"'{name}'"
+            )
+
+        async def _get() -> object:
+            # If already cached, return immediately
+            if name in self._wiring._values:
+                return self._wiring._values[name]
+
+            # If not cached, run instantiation in executor to avoid blocking
+            # the event loop.
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: self._wiring._instantiate_attr(
+                    name, lambda: self._wiring._instantiate_impl(name)
+                ),
+            )
+
+        return _get
