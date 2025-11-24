@@ -178,6 +178,11 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
         When the spec contains integer keys (e.g., {0: value, 1: value}),
         these are treated as positional arguments and are separated from
         keyword arguments before calling the constructor.
+
+        Factory Method Support:
+        When a factory method is specified in the spec key (e.g.,
+        "module.Class instance.from_date"), the factory method is called
+        instead of the class constructor.
         """
         # Check for circular dependencies
         stack = self._get_resolving_stack()
@@ -199,9 +204,15 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
                     f"Unknown placeholder '{name}' referenced."
                 )
 
-            module_name, class_name, data = self._parsed[name]
+            module_name, class_name, factory_method, data = self._parsed[name]
             module = importlib.import_module(module_name)
             cls = cast(_Constructor, getattr(module, class_name))
+
+            # If a factory method is specified, get it from the class
+            if factory_method:
+                constructor = cast(_Constructor, getattr(cls, factory_method))
+            else:
+                constructor = cls
 
             # Resolve arguments
             kwargs = self._resolve_runtime(data, context=name)
@@ -211,14 +222,14 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
                     # Separate positional args (int keys) from keyword args
                     # (str keys)
                     pos_args, kwargs_dict = self._separate_args_kwargs(kwargs)
-                    instance = cls(*pos_args, **kwargs_dict)
+                    instance = constructor(*pos_args, **kwargs_dict)
                 elif isinstance(kwargs, list):
                     # All positional arguments
-                    instance = cls(*kwargs)
+                    instance = constructor(*kwargs)
                 else:
                     # Should not happen given _ResolvedSpecMapping type,
                     # but for safety
-                    instance = cls(kwargs)
+                    instance = constructor(kwargs)
             except Exception as e:
                 raise WiringError(
                     f"failed to instantiate '{name}': {e}"

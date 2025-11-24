@@ -89,13 +89,14 @@ class WiringCompiler(WiringBase):
         name: str,
         module_name: str,
         class_name: str,
+        factory_method: str | None,
         data: _ResolvedSpecMapping,
         *,
         aio: bool = False,
         thread_safe: bool = False,
     ) -> ast.FunctionDef | ast.AsyncFunctionDef:
         """Build an AST FunctionDef for a cached accessor that returns
-        ``module.class(**data)``.
+        ``module.class(**data)`` or ``module.class.factory_method(**data)``.
 
         When ``aio`` is True this function will produce an
         ``ast.AsyncFunctionDef`` that awaits referenced accessors and calls
@@ -103,11 +104,23 @@ class WiringCompiler(WiringBase):
         When ``aio`` is False it produces a standard synchronous
         ``ast.FunctionDef``.
         """
-        module_attr = ast.Attribute(
-            value=ast.Name(id=module_name, ctx=ast.Load()),
-            attr=class_name,
-            ctx=ast.Load(),
-        )
+        # Build the target callable: module.Class or module.Class.factoryMethod
+        if factory_method:
+            module_attr = ast.Attribute(
+                value=ast.Attribute(
+                    value=ast.Name(id=module_name, ctx=ast.Load()),
+                    attr=class_name,
+                    ctx=ast.Load(),
+                ),
+                attr=factory_method,
+                ctx=ast.Load(),
+            )
+        else:
+            module_attr = ast.Attribute(
+                value=ast.Name(id=module_name, ctx=ast.Load()),
+                attr=class_name,
+                ctx=ast.Load(),
+            )
         kwargs: list[ast.keyword] = []
         # When compiling async accessors we must precompute awaited
         # referenced attributes into locals so that the constructor
@@ -537,7 +550,7 @@ class WiringCompiler(WiringBase):
 
         # Add import statements
         modules = set()
-        for module_name, _, _ in self._parsed.values():
+        for module_name, _, _, _ in self._parsed.values():
             modules.add(module_name)
         if aio:
             modules.add("asyncio")
@@ -601,12 +614,18 @@ class WiringCompiler(WiringBase):
                 type_params=[],
             )
             class_body.insert(0, init_def)
-        for name, (module_name, class_name, data) in self._parsed.items():
+        for name, (
+            module_name,
+            class_name,
+            factory_method,
+            data,
+        ) in self._parsed.items():
             class_body.append(
                 self._compile_property(
                     name,
                     module_name,
                     class_name,
+                    factory_method,
                     data,
                     aio=aio,
                     thread_safe=thread_safe,

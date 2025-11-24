@@ -88,11 +88,11 @@ Spec: TypeAlias = dict[str, _SpecMapping | _ConstantValue]
 
 # Type aliases for parsed spec entries
 _ParsedEntry: TypeAlias = tuple[
-    str, str, _ResolvedSpecMapping
-]  # (module, class, data)
+    str, str, str | None, _ResolvedSpecMapping
+]  # (module, class, factory_method, data)
 _UnresolvedParsedEntry: TypeAlias = tuple[
-    str, str, str, _SpecMapping
-]  # (module, class, name, data)
+    str, str, str, str | None, _SpecMapping
+]  # (module, class, name, factory_method, data)
 
 
 class _ThreadLocalState(ThreadLocalState):
@@ -151,9 +151,10 @@ class WiringBase:
             name: (
                 module_name,
                 class_name,
+                factory_method,
                 cast(_ResolvedSpecMapping, self._resolve(value)),
             )
-            for module_name, class_name, name, value in parsed
+            for module_name, class_name, name, factory_method, value in parsed
         }
         # Instances will be lazily instantiated and stored in self._values
         if self._thread_safe:
@@ -173,18 +174,39 @@ class WiringBase:
         if SPEC_KEY_DELIMITER not in key:
             return None  # It's a constant
 
-        # class wiring: "module.Class name"
-        type_str, name = key.rsplit(SPEC_KEY_DELIMITER, 1)
+        # class wiring: "module.Class name" or
+        # "module.Class name.factoryMethod"
+        type_str, name_part = key.rsplit(SPEC_KEY_DELIMITER, 1)
         parts = type_str.split(".")
         module_name = ".".join(parts[:-1])
         class_name = parts[-1]
+
+        # Check if name_part contains a factory method
+        # e.g., "myInstance.from_date" -> name="myInstance",
+        # factory_method="from_date"
+        if "." in name_part:
+            name, factory_method = name_part.split(".", 1)
+            if "." in factory_method:
+                raise ValueError(
+                    f"invalid spec key '{key}': nested factory methods "
+                    f"are not supported."
+                )
+        else:
+            name = name_part
+            factory_method = None
 
         if not module_name:
             raise ValueError(
                 f"invalid spec key '{key}': missing module qualification"
             )
 
-        return (module_name, class_name, name, cast(_SpecMapping, value))
+        return (
+            module_name,
+            class_name,
+            name,
+            factory_method,
+            cast(_SpecMapping, value),
+        )
 
     def _is_placeholder(self, s: str) -> bool:
         """Check if a string is a placeholder reference like '{name}'."""
