@@ -15,6 +15,7 @@ from apywire.constants import (
     CACHE_ATTR_PREFIX,
     COMPILED_ARG_PREFIX,
     COMPILED_VAR_PREFIX,
+    SYNTHETIC_CONST,
 )
 from apywire.wiring import (
     WiringBase,
@@ -551,7 +552,9 @@ class WiringCompiler(WiringBase):
         # Add import statements
         modules = set()
         for module_name, _, _, _ in self._parsed.values():
-            modules.add(module_name)
+            # Skip synthetic __pconst__ module
+            if module_name != SYNTHETIC_CONST:
+                modules.add(module_name)
         if aio:
             modules.add("asyncio")
         if thread_safe:
@@ -620,13 +623,19 @@ class WiringCompiler(WiringBase):
             factory_method,
             data,
         ) in self._parsed.items():
+            # Skip synthetic auto-promoted constants
+            # These require runtime interpolation and can't be pre-computed
+            if module_name == SYNTHETIC_CONST and class_name == "str":
+                continue
+
+            # Regular wired object
             class_body.append(
                 self._compile_property(
                     name,
                     module_name,
                     class_name,
                     factory_method,
-                    data,
+                    cast(_ResolvedSpecMapping, data),
                     aio=aio,
                     thread_safe=thread_safe,
                 )
