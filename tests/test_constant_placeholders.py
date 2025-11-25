@@ -242,3 +242,84 @@ def test_compilation_with_placeholders() -> None:
 
     # Verify compiled code works (auto-promoted constants are skipped)
     # Dynamic access not fully type-checked by mypy for exec'd code
+
+
+def test_interpolate_placeholders_unknown_placeholder() -> None:
+    """Test that _interpolate_placeholders raises on unknown placeholder."""
+
+    from apywire import Spec, Wiring
+    from apywire.exceptions import UnknownPlaceholderError
+
+    spec: Spec = {"base": "value"}
+    wired = Wiring(spec, thread_safe=False)
+
+    # Call _interpolate_placeholders with unknown placeholder
+    with pytest.raises(UnknownPlaceholderError, match="Unknown placeholder"):
+        wired._interpolate_placeholders(
+            "Test {unknown}", {"base": "value"}, "test"
+        )
+
+
+def test_resolve_constant_non_string_reference() -> None:
+    """Test _resolve_constant with non-string reference value."""
+    from apywire import Spec, Wiring
+
+    # Constant referencing an integer constant
+    spec: Spec = {"number": 42, "message": "{number}"}
+    wired = Wiring(spec, thread_safe=False)
+
+    # The value should have been resolved to string "42"
+    assert wired._values["message"] == "42"
+
+
+def test_resolve_constant_with_tuple() -> None:
+    """Test _resolve_constant with tuple values."""
+    from typing import cast
+
+    from apywire import Spec, Wiring
+
+    # Constant with tuple containing placeholders
+    spec = cast(Spec, {"base": "test", "data": ("{base}", "{base}")})
+    wired = Wiring(spec, thread_safe=False)
+
+    # Should resolve tuple placeholders
+    assert wired._values["data"] == ("test", "test")
+
+
+def test_transitive_promotion_of_constants() -> None:
+    """Test transitive promotion of constants with wired refs."""
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, Wiring
+
+    class MyClass:
+        def __init__(self) -> None:
+            pass
+
+    mod = ModuleType("test_transitive")
+    mod.MyClass = MyClass  # type: ignore[attr-defined]
+    sys.modules["test_transitive"] = mod
+
+    try:
+        # c depends on b, b depends on a, a depends on wired obj
+        spec: Spec = {
+            "test_transitive.MyClass obj": {},
+            "a": "Object: {obj}",
+            "b": "B: {a}",
+            "c": "C: {b}",
+        }
+        wired = Wiring(spec, thread_safe=False)
+
+        # All three should be promoted (not in _values)
+        assert "a" not in wired._values
+        assert "b" not in wired._values
+        assert "c" not in wired._values
+
+        # All should be in _parsed as auto-promoted
+        assert "a" in wired._parsed
+        assert "b" in wired._parsed
+        assert "c" in wired._parsed
+
+    finally:
+        del sys.modules["test_transitive"]

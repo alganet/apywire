@@ -478,3 +478,106 @@ def test_compile_ast_recursion_call_tuple() -> None:
 
     finally:
         del sys.modules["ast_rec"]
+
+
+def test_runtime_non_thread_safe_cached_value() -> None:
+    """Test non-thread-safe path with pre-cached value (runtime.py:137)."""
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, Wiring
+
+    class MyClass:
+        def __init__(self) -> None:
+            pass
+
+    mod = ModuleType("test_cached")
+    mod.MyClass = MyClass  # type: ignore[attr-defined]
+    sys.modules["test_cached"] = mod
+
+    try:
+        spec: Spec = {"test_cached.MyClass obj": {}}
+        wired = Wiring(spec, thread_safe=False)
+
+        # Pre-cache the value
+        wired._values["obj"] = "pre_cached"
+
+        # Access through _instantiate_attr should return cached value
+        result = wired._instantiate_attr("obj", lambda: MyClass())
+        assert result == "pre_cached"
+
+    finally:
+        del sys.modules["test_cached"]
+
+
+def test_runtime_unknown_placeholder_in_instantiate() -> None:
+    """Test unknown placeholder error in _instantiate_impl (runtime.py:205)."""
+    from apywire import Wiring
+
+    # Create wiring and manually trigger _instantiate_impl with unknown name
+    wired = Wiring({}, thread_safe=False)
+
+    with pytest.raises(Exception, match="Unknown placeholder"):
+        wired._instantiate_impl("unknown_name")
+
+
+def test_runtime_invalid_constructor_data_type() -> None:
+    """Test _instantiate_impl with invalid data type (runtime.py:242)."""
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, Wiring
+
+    class MyClass:
+        def __init__(self, x: object) -> None:
+            self.x = x
+
+    mod = ModuleType("test_invalid_data")
+    mod.MyClass = MyClass  # type: ignore[attr-defined]
+    sys.modules["test_invalid_data"] = mod
+
+    try:
+        # Manually create an invalid parsed entry
+        spec: Spec = {}
+        wired = Wiring(spec, thread_safe=False)
+
+        # Override _parsed with invalid data (not dict or list)
+        wired._parsed["obj"] = (
+            "test_invalid_data",
+            "MyClass",
+            None,
+            "invalid_string",
+        )
+
+        # This should trigger the safety path line 242
+        result = wired._instantiate_impl("obj")
+        assert isinstance(result, MyClass)
+        assert result.x == "invalid_string"
+
+    finally:
+        del sys.modules["test_invalid_data"]
+
+
+def test_runtime_format_string_constant_non_string_template() -> None:
+    """Test _format_string_constant with non-string template."""
+    from apywire import Wiring
+    from apywire.exceptions import WiringError
+
+    wired = Wiring({}, thread_safe=False)
+
+    # _format_string_constant expects a string, pass non-string
+    with pytest.raises(WiringError, match="template is not a string"):
+        wired._format_string_constant(123, "test_context")
+
+
+def test_runtime_format_string_constant_unknown_placeholder() -> None:
+    """Test _format_string_constant with unknown placeholder."""
+    from apywire import Spec, Wiring
+    from apywire.exceptions import UnknownPlaceholderError
+
+    spec: Spec = {"base": "test"}
+    wired = Wiring(spec, thread_safe=False)
+
+    # Template with unknown placeholder
+    with pytest.raises(UnknownPlaceholderError, match="Unknown placeholder"):
+        wired._format_string_constant("Value: {unknown}", "test_context")

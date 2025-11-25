@@ -88,7 +88,38 @@ class CompiledThreadSafeMixin:
             return
         for lock in reversed(self._local.held_locks):
             lock.release()
-        self._local.held_locks = []
+        self._local.held_locks.clear()
+
+    def _check_cache(self, name: str) -> tuple[bool, object | None]:
+        """Check if attribute is cached, return (found, value) tuple.
+
+        Checks both _values dict (if present) and _<name> attribute.
+        Returns (True, value) if cached, (False, None) if not found.
+        """
+        cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
+
+        # Check _values dict first (runtime path)
+        if hasattr(self, "_values"):
+            values_dict = cast(dict[str, object], getattr(self, "_values"))
+            if name in values_dict:
+                return (True, values_dict[name])
+
+        # Check cached attribute (compiled path)
+        if hasattr(self, cache_attr):
+            return (True, cast(object, getattr(self, cache_attr)))
+
+        return (False, None)
+
+    def _set_cache(self, name: str, value: object) -> None:
+        """Store value in cache using appropriate storage mechanism.
+
+        Uses _values dict if present, otherwise uses _<name> attribute.
+        """
+        if hasattr(self, "_values"):
+            self._values[name] = value
+        else:
+            cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
+            setattr(self, cache_attr, value)
 
     def _wrap_instantiation_error(self, e: Exception, name: str) -> NoReturn:
         """Wrap exceptions during instantiation with proper context.
@@ -119,12 +150,10 @@ class CompiledThreadSafeMixin:
         thread-safe locking logic permits it to run. Returns the cached
         attribute (``self._<name>``) if already present.
         """
-        cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
-        # check cache mapping or attribute
-        if hasattr(self, "_values") and name in self._values:
-            return self._values[name]
-        if hasattr(self, cache_attr):
-            return cast(object, getattr(self, cache_attr))
+        # Check cache first
+        found, value = self._check_cache(name)
+        if found:
+            return value
 
         lock = self._get_attribute_lock(name)
         mode: str | None = getattr(self._local, "mode", None)
@@ -134,8 +163,9 @@ class CompiledThreadSafeMixin:
             # If not, fall back to global lock.
             if lock.acquire(blocking=False):
                 try:
-                    if hasattr(self, cache_attr):
-                        return cast(object, getattr(self, cache_attr))
+                    found, value = self._check_cache(name)
+                    if found:
+                        return value
                     # Enter optimistic mode and track held locks to allow
                     # nested instantiation to detect per-attribute
                     # conflicts.
@@ -155,11 +185,8 @@ class CompiledThreadSafeMixin:
                         lock.release()
                         self._wrap_instantiation_error(e, name)
                     else:
-                        # store both in mapping and attribute when available
-                        if hasattr(self, "_values"):
-                            self._values[name] = inst
-                        else:
-                            setattr(self, cache_attr, inst)
+                        # Store in cache
+                        self._set_cache(name, inst)
                         # Release the optimistic held locks before returning
                         self._release_held_locks()
                         return inst
@@ -185,13 +212,11 @@ class CompiledThreadSafeMixin:
                     attempts = 0
                     while True:
                         try:
-                            if hasattr(self, cache_attr):
-                                return cast(object, getattr(self, cache_attr))
+                            found, value = self._check_cache(name)
+                            if found:
+                                return value
                             inst = maker()
-                            if hasattr(self, "_values"):
-                                self._values[name] = inst
-                            else:
-                                setattr(self, cache_attr, inst)
+                            self._set_cache(name, inst)
                             return inst
                         except LockUnavailableError:
                             attempts += 1
@@ -219,13 +244,11 @@ class CompiledThreadSafeMixin:
             held = self._get_held_locks()
             held.append(lock)
             try:
-                if hasattr(self, cache_attr):
-                    return cast(object, getattr(self, cache_attr))
+                found, value = self._check_cache(name)
+                if found:
+                    return value
                 inst = maker()
-                if hasattr(self, "_values"):
-                    self._values[name] = inst
-                else:
-                    setattr(self, cache_attr, inst)
+                self._set_cache(name, inst)
                 return inst
             finally:
                 # Locks are intentionally not released here; they will be
