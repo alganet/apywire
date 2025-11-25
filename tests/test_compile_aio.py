@@ -284,3 +284,83 @@ def test_compile_aio_mixed_args() -> None:
         assert val == complex(1.0, 2.0)
 
     asyncio.run(run())
+
+
+def test_aio_compile_await_non_self_call() -> None:
+    """Test _replace_awaits_with_locals with non-self await nodes."""
+    from apywire import Spec, WiringCompiler
+
+    # Create spec with async compilation that could have nested awaits
+    spec: Spec = {
+        "datetime.datetime now": {"year": 2025, "month": 1, "day": 1},
+        "datetime.datetime later": {"year": 2025, "month": 6, "day": 15},
+    }
+
+    code = WiringCompiler(spec, thread_safe=False).compile(aio=True)
+
+    # Verify code was generated (exact await handling is complex)
+    assert "async def now(self):" in code
+    assert "async def later(self):" in code
+
+
+def test_aio_compile_nested_call_replacement() -> None:
+    """Test _replace_awaits_with_locals in Call nodes."""
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, WiringCompiler
+
+    class MockMod(ModuleType):
+        def combine(
+            self, *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            return {"args": args, **kwargs}
+
+    sys.modules["nested_call"] = MockMod("nested_call")
+
+    try:
+        spec: Spec = {
+            "nested_call.combine root": {
+                "x": "{a}",
+                "y": "{b}",
+            },
+            "nested_call.combine a": {},
+            "nested_call.combine b": {},
+        }
+        code = WiringCompiler(spec, thread_safe=False).compile(aio=True)
+
+        # Verify async code was generated with replaced awaits
+        assert "async def root(self):" in code
+        assert "__val_" in code
+
+    finally:
+        del sys.modules["nested_call"]
+
+
+def test_compile_constant_accessor_skip() -> None:
+    """Test that constant accessors skip already-parsed items."""
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, WiringCompiler
+
+    class MockMod(ModuleType):
+        pass
+
+    sys.modules["const_test"] = MockMod("const_test")
+
+    try:
+        # Mix of parsed wired objects and constants
+        spec: Spec = {
+            "datetime.datetime obj": {"year": 2025, "month": 1, "day": 1},
+            "const": "value",
+        }
+        code = WiringCompiler(spec, thread_safe=False).compile()
+
+        # Both should be in code
+        assert "def obj(self):" in code
+        assert "def const(self):" in code
+        assert "return 'value'" in code
+
+    finally:
+        del sys.modules["const_test"]

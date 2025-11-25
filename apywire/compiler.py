@@ -128,66 +128,8 @@ class WiringCompiler(WiringBase):
         # lambda passed to a thread pool executor is pure synchronous.
         pre_statements: list[ast.stmt] = []
 
-        # Helper to extract `await self.<name>()` occurrences from AST
-        # expressions and replace them with local variables. This lets us
-        # run a synchronous lambda in `run_in_executor` without `await`
-        # nodes embedded inside it.
-        counter = 0
-
-        def _replace_awaits_with_locals(node: ast.expr) -> ast.expr:
-            nonlocal counter
-
-            if isinstance(node, ast.Await):
-                inner = node.value
-                if (
-                    isinstance(inner, ast.Call)
-                    and isinstance(inner.func, ast.Attribute)
-                    and isinstance(inner.func.value, ast.Name)
-                    and inner.func.value.id == "self"
-                ):
-                    # produce a unique variable name and precompute the await
-                    counter += 1
-                    var_name = f"{COMPILED_VAR_PREFIX}{counter}"
-                    assign = ast.Assign(
-                        targets=[ast.Name(id=var_name, ctx=ast.Store())],
-                        value=node,
-                    )
-                    pre_statements.append(assign)
-                    return ast.Name(id=var_name, ctx=ast.Load())
-                return node
-
-            # Recurse into common composite nodes
-            if isinstance(node, ast.Call):
-                new_args = [_replace_awaits_with_locals(a) for a in node.args]
-                new_keywords = [
-                    ast.keyword(
-                        arg=k.arg, value=_replace_awaits_with_locals(k.value)
-                    )
-                    for k in node.keywords
-                ]
-                return ast.Call(
-                    func=node.func, args=new_args, keywords=new_keywords
-                )
-            if isinstance(node, ast.Dict):
-                new_keys = [
-                    _replace_awaits_with_locals(k) if k is not None else None
-                    for k in node.keys
-                ]
-                new_values = [
-                    _replace_awaits_with_locals(v) for v in node.values
-                ]
-                return ast.Dict(keys=new_keys, values=new_values)
-            if isinstance(node, ast.List):
-                return ast.List(
-                    elts=[_replace_awaits_with_locals(e) for e in node.elts],
-                    ctx=node.ctx,
-                )
-            if isinstance(node, ast.Tuple):
-                return ast.Tuple(
-                    elts=[_replace_awaits_with_locals(e) for e in node.elts],
-                    ctx=node.ctx,
-                )
-            return node
+        # Counter for generating unique variable names (mutable list)
+        counter = [0]
 
         args: list[ast.expr] = []
 
@@ -210,7 +152,9 @@ class WiringCompiler(WiringBase):
         for i, value in enumerate(args_data):
             raw_val_ast = self._astify(value, aio=aio)
             if aio:
-                val_ast = _replace_awaits_with_locals(raw_val_ast)
+                val_ast = self._replace_awaits_with_locals(
+                    raw_val_ast, pre_statements, counter
+                )
                 var_name = f"{COMPILED_ARG_PREFIX}{i}"
                 assign = ast.Assign(
                     targets=[ast.Name(id=var_name, ctx=ast.Store())],
@@ -229,7 +173,9 @@ class WiringCompiler(WiringBase):
                 # Replace any awaited accessors with local precomputed
                 # variables and assign all values to local variables so
                 # that the executor lambda can be synchronous.
-                val_ast = _replace_awaits_with_locals(raw_val_ast)
+                val_ast = self._replace_awaits_with_locals(
+                    raw_val_ast, pre_statements, counter
+                )
                 # Use named variables for top-level keyword args to make
                 # the generated code more readable and deterministic.
                 var_name = f"{COMPILED_VAR_PREFIX}{key}"
@@ -493,6 +439,101 @@ class WiringCompiler(WiringBase):
                 type_params=[],
             )
         return func_def
+
+    def _replace_awaits_with_locals(
+        self,
+        node: ast.expr,
+        pre_statements: list[ast.stmt],
+        counter: list[int],
+    ) -> ast.expr:
+        """Replace await expressions with local variable assignments.
+
+        Recursively processes AST nodes to replace `ast.Await` expressions
+        with local variable assignments. This ensures that synchronous lambdas
+        executed in a thread pool do not contain `await` nodes.
+
+        Args:
+            node: AST expression node to process
+            pre_statements: List to accumulate pre-computation statements
+            counter: Single-element list used as mutable counter for var naming
+
+        Returns:
+            Transformed AST expression node
+        """
+        if isinstance(node, ast.Await):
+            inner = node.value
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and isinstance(inner.func.value, ast.Name)
+                and inner.func.value.id == "self"
+            ):
+                # produce a unique variable name and precompute the await
+                counter[0] += 1
+                var_name = f"{COMPILED_VAR_PREFIX}{counter[0]}"
+                assign = ast.Assign(
+                    targets=[ast.Name(id=var_name, ctx=ast.Store())],
+                    value=node,
+                )
+                pre_statements.append(assign)
+                return ast.Name(id=var_name, ctx=ast.Load())
+            return node
+
+        # Recurse into common composite nodes
+        if isinstance(node, ast.Call):
+            new_args = [
+                self._replace_awaits_with_locals(a, pre_statements, counter)
+                for a in node.args
+            ]
+            new_keywords = [
+                ast.keyword(
+                    arg=k.arg,
+                    value=self._replace_awaits_with_locals(
+                        k.value, pre_statements, counter
+                    ),
+                )
+                for k in node.keywords
+            ]
+            return ast.Call(
+                func=node.func, args=new_args, keywords=new_keywords
+            )
+        if isinstance(node, ast.Dict):
+            new_keys = [
+                (
+                    self._replace_awaits_with_locals(
+                        k, pre_statements, counter
+                    )
+                    if k is not None
+                    else None
+                )
+                for k in node.keys
+            ]
+            new_values = [
+                self._replace_awaits_with_locals(v, pre_statements, counter)
+                for v in node.values
+            ]
+            return ast.Dict(keys=new_keys, values=new_values)
+        if isinstance(node, ast.List):
+            return ast.List(
+                elts=[
+                    self._replace_awaits_with_locals(
+                        e, pre_statements, counter
+                    )
+                    for e in node.elts
+                ],
+                ctx=node.ctx,
+            )
+        if isinstance(node, ast.Tuple):
+            return ast.Tuple(
+                elts=[
+                    self._replace_awaits_with_locals(
+                        e, pre_statements, counter
+                    )
+                    for e in node.elts
+                ],
+                ctx=node.ctx,
+            )
+        return node
 
     def _compile_constant_property(
         self,

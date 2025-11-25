@@ -631,3 +631,100 @@ def test_compiled_thread_safe_singleton_instantiation_async() -> None:
     finally:
         if "mymod_compiled_thread_async" in sys.modules:
             del sys.modules["mymod_compiled_thread_async"]
+
+
+def test_thread_safe_nested_cache_hit_global_mode() -> None:
+    """Test cache hit in nested invocation during global mode."""
+    from types import ModuleType
+
+    from apywire import Wiring
+
+    class Parent:
+        def __init__(self, child: object) -> None:
+            self.child = child
+
+    class Child:
+        def __init__(self) -> None:
+            pass
+
+    mod = ModuleType("test_nested_cache")
+    mod.Parent = Parent  # type: ignore[attr-defined]
+    mod.Child = Child  # type: ignore[attr-defined]
+    sys.modules["test_nested_cache"] = mod
+
+    try:
+        spec: apywire.Spec = {
+            "test_nested_cache.Parent parent": {"child": "{child}"},
+            "test_nested_cache.Child child": {},
+        }
+        wired = Wiring(spec, thread_safe=True)
+
+        # Pre-cache child
+        child_obj = Child()
+        wired._values["child"] = child_obj
+
+        # Accessing parent should use cached child
+        parent_inst = wired.parent()
+        assert isinstance(parent_inst, Parent)
+        assert parent_inst.child is child_obj
+
+    finally:
+        del sys.modules["test_nested_cache"]
+
+
+def test_compiled_container_setattr_path() -> None:
+    """Test compiled container uses setattr when _values is absent."""
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, WiringCompiler
+
+    class MyClass:
+        def __init__(self) -> None:
+            pass
+
+    mod = ModuleType("test_compiled")
+    mod.MyClass = MyClass  # type: ignore[attr-defined]
+    sys.modules["test_compiled"] = mod
+
+    try:
+        spec: Spec = {"test_compiled.MyClass obj": {}}
+
+        code = WiringCompiler(spec, thread_safe=False).compile()
+
+        namespace: dict[str, object] = {}
+        exec(code, namespace)
+        compiled = namespace["compiled"]
+
+        # Access obj, should use setattr internally
+        obj = cast(MyClass, getattr(compiled, "obj")())
+        assert isinstance(obj, MyClass)
+
+        # Verify cached using hasattr
+        assert hasattr(compiled, "_obj")
+
+    finally:
+        del sys.modules["test_compiled"]
+
+
+def test_optimistic_mode_cleanup() -> None:
+    """Test optimistic mode cleanup after successful instantiation."""
+    from unittest.mock import MagicMock
+
+    from apywire.threads import CompiledThreadSafeMixin
+
+    class MockContainer(CompiledThreadSafeMixin):
+        def __init__(self) -> None:
+            self._init_thread_safety()
+            self._values: dict[str, object] = {}
+
+    container = MockContainer()
+    maker = MagicMock(return_value="test")
+
+    # Successful optimistic instantiation
+    result = container._instantiate_attr("test", maker)
+
+    # Verify mode was cleaned up
+    assert container._local.mode is None
+    assert container._get_held_locks() == []
+    assert result == "test"
