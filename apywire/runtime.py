@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import re
 from typing import Awaitable, Callable, Protocol, cast, final
 
+from apywire.constants import SYNTHETIC_CONST
 from apywire.exceptions import (
     CircularWiringError,
     UnknownPlaceholderError,
@@ -205,6 +207,14 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
                 )
 
             module_name, class_name, factory_method, data = self._parsed[name]
+
+            # Check for synthetic auto-promoted constant
+            if module_name == SYNTHETIC_CONST and class_name == "str":
+                # This is an auto-promoted constant with string interpolation
+                value = self._format_string_constant(data, context=name)
+                self._values[name] = value
+                return value
+
             module = importlib.import_module(module_name)
             cls = cast(_Constructor, getattr(module, class_name))
 
@@ -270,6 +280,55 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
         if isinstance(o, tuple):
             return tuple(self._resolve_runtime(v, context) for v in o)
         return o
+
+    def _format_string_constant(
+        self, template: _ResolvedValue, context: str
+    ) -> str:
+        """Format a string constant with wired object interpolation.
+
+        Converts template like "Server {host} at {now}" by:
+        1. Finding all placeholders in the string
+        2. Resolving each to its wired object or constant
+        3. Converting to string via str()
+        4. Performing string interpolation
+
+        Args:
+            template: Template string with placeholders
+            context: Name of the constant being formatted (for error messages)
+
+        Returns:
+            Fully formatted string with all placeholders resolved
+
+        Raises:
+            WiringError: If template is not a string
+            UnknownPlaceholderError: If placeholder references unknown object
+        """
+        # Template should be a string
+        if not isinstance(template, str):
+            raise WiringError(
+                f"Auto-promoted constant '{context}' template is not a string"
+            )
+
+        # Build lookup dict that resolves wired objects on access
+        # We can't use _interpolate_placeholders directly because we need
+        # to call getattr() for wired objects, not just lookup in a dict
+        def replace_placeholder(match: re.Match[str]) -> str:
+            ref_name = match.group(1)
+
+            # Check if the referenced name exists
+            if ref_name not in self._values and ref_name not in self._parsed:
+                raise UnknownPlaceholderError(
+                    f"Unknown placeholder '{ref_name}' "
+                    f"in auto-promoted constant '{context}'"
+                )
+
+            # Get the value (instantiate if needed via accessor)
+            value = cast(object, getattr(self, ref_name)())
+
+            # Convert to string
+            return str(value)
+
+        return re.sub(self._placeholder_pattern, replace_placeholder, template)
 
 
 @final
