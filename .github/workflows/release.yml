@@ -2,13 +2,12 @@
 #
 # SPDX-License-Identifier: ISC
 
-
 name: Release
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   release:
@@ -16,13 +15,13 @@ jobs:
     environment: release
 
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-python@v6
-      with:
-        python-version: '3.13'
-    - run: make pip
-    - run: make dist
-    - run: make publish
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: sudo apt-get install -y patchelf
+      - run: make pip
+      - run: make publish
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}

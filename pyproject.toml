@@ -34,17 +34,18 @@ Issues = "https://github.com/alganet/apywire/issues"
 
 [project.optional-dependencies]
 dev = [
+    "auditwheel",
     "black",
     "build",
     "coverage",
     "Cython",
-    "flake8",
     "flake8-pyproject",
+    "flake8",
     "isort",
-    "mkdocs",
-    "mkdocs-material",
-    "mkdocstrings[python]",
     "mkdocs-autorefs",
+    "mkdocs-material",
+    "mkdocs",
+    "mkdocstrings[python]",
     "mypy",
     "pytest-cov",
     "pytest",
