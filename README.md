@@ -56,7 +56,7 @@ make .venv && source .venv/bin/activate  # Setup
 make all                                  # Format, lint, test, build
 ```
 
-See [AGENTS.md](AGENTS.md) for guidelines.
+See [docs/development.md](docs/development.md) for guidelines.
 
 ## License
 
