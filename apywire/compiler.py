@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import ast
+from operator import itemgetter
 from types import EllipsisType
 from typing import cast
 
@@ -25,7 +26,6 @@ from apywire.wiring import (
     _WiredRef,
 )
 
-# Constant for property AST arguments (used in compile methods)
 _PROPERTY_ARGS = ast.arguments(
     posonlyargs=[],
     args=[ast.arg(arg="self")],
@@ -122,17 +122,13 @@ class WiringCompiler(WiringBase):
                 attr=class_name,
                 ctx=ast.Load(),
             )
-        kwargs: list[ast.keyword] = []
-        # When compiling async accessors we must precompute awaited
-        # referenced attributes into locals so that the constructor
-        # lambda passed to a thread pool executor is pure synchronous.
         pre_statements: list[ast.stmt] = []
 
-        # Counter for generating unique variable names (mutable list)
-        counter = [0]
+        counter = [0]  # For generating unique variable names
 
         args: list[ast.expr] = []
 
+        kwargs: list[ast.keyword] = []
         # Normalize data into args_data (list) and kwargs_data (dict)
         args_data: list[_ResolvedValue] = []
         kwargs_data: dict[str, _ResolvedValue] = {}
@@ -141,12 +137,16 @@ class WiringCompiler(WiringBase):
             args_data = data
         else:
             data_dict = data
-            int_keys = sorted(k for k in data_dict if isinstance(k, int))
-            str_keys = [k for k in data_dict if isinstance(k, str)]
-            for k_int in int_keys:
-                args_data.append(data_dict[k_int])
-            for k_str in str_keys:
-                kwargs_data[k_str] = data_dict[k_str]
+            # Iterate once over data.items() to separate args and kwargs
+            args_items = []
+            kwargs_data = {}
+            for k, v in data_dict.items():
+                if isinstance(k, int):
+                    args_items.append((k, v))
+                elif isinstance(k, str):
+                    kwargs_data[k] = v
+            args_items.sort(key=itemgetter(0))
+            args_data = [v for _, v in args_items]
 
         # Process positional args
         for i, value in enumerate(args_data):
@@ -189,12 +189,8 @@ class WiringCompiler(WiringBase):
                 kw_val = raw_val_ast
             kwargs.append(ast.keyword(arg=key, value=kw_val))
 
-        # Build the actual constructor call (module.Class(*args, **kwargs))
         call = ast.Call(func=module_attr, args=args, keywords=kwargs)
 
-        # Cache attribute name like `_name` used to store instantiated
-        # objects on `self` at runtime. The compiled accessor returns
-        # `self._name` when present.
         cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
 
         # if not hasattr(self, '_name'): ...

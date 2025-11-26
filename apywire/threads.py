@@ -20,16 +20,12 @@ from apywire.exceptions import LockUnavailableError
 
 
 class _ThreadLocalState(threading.local):
-    """Typed thread-local storage for wiring resolution state.
+    """Thread-local storage for wiring resolution state.
 
-    This class provides properly typed attributes to avoid mypy Any propagation
-    when accessing dynamically-set attributes on threading.local().
-
-    Attributes are lazily initialized per-thread:
-        resolving_stack: Stack of attribute names currently being resolved
-                        in this thread (for circular dependency detection).
-        mode: Current instantiation mode ('optimistic', 'global', or None).
-        held_locks: List of locks currently held by this thread.
+    Provides typed attributes initialized per-thread:
+    - resolving_stack: Stack for circular dependency detection
+    - mode: Current instantiation mode ('optimistic', 'global', or None)
+    - held_locks: Locks held by this thread
     """
 
     def __init__(self) -> None:
@@ -94,7 +90,6 @@ class ThreadSafeMixin:
         """
         cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
 
-        # Check _values dict first (runtime path)
         if hasattr(self, "_values"):
             values_dict = cast(dict[str, object], getattr(self, "_values"))
             if name in values_dict:
@@ -162,9 +157,7 @@ class ThreadSafeMixin:
                     found, value = self._check_cache(name)
                     if found:
                         return value
-                    # Enter optimistic mode and track held locks to allow
-                    # nested instantiation to detect per-attribute
-                    # conflicts.
+                    # Enter optimistic mode and track held locks
                     self._local.mode = "optimistic"
                     held = self._get_held_locks()
                     held.clear()

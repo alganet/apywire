@@ -35,8 +35,6 @@ _ConstantValue: TypeAlias = (
 )
 
 
-# Marker class for a placeholder reference. Declared before the
-# type aliases so `ResolvedValue` can reference it directly.
 class _WiredRef:
     """Marker for a value that references another wired attribute.
 
@@ -49,9 +47,7 @@ class _WiredRef:
         self.name = name
 
 
-# Spec value types come from the user-provided `Spec` input. They are
-# primitives or nested containers and may include placeholder strings
-# like "{otherName}".
+# User-provided spec values: primitives, containers, or placeholders
 _SpecValue: TypeAlias = (
     _ConstantValue
     | str
@@ -60,9 +56,7 @@ _SpecValue: TypeAlias = (
     | dict[str | int, "_SpecValue"]
 )
 
-# Resolved values are produced after parsing placeholders; strings of
-# the form "{name}" become `_WiredRef` markers and are resolved at
-# instantiation.
+# After parsing: placeholder strings "{name}" become _WiredRef markers
 _ResolvedValue: TypeAlias = (
     _ConstantValue
     | _WiredRef
@@ -177,8 +171,8 @@ class WiringBase:
                 # Has placeholders - classify later
                 const_with_refs[key] = (value, placeholder_names)
 
-        # Separate constants with refs into const-only vs wired-object refs
-        # handling transitive promotion
+        # Promote constants to accessors if they reference wired objects:
+        # Transitive: mark direct refs, then propagate to dependents
         const_deps_graph: dict[str, set[str]] = {
             key: placeholder_names
             for key, (value, placeholder_names) in const_with_refs.items()
@@ -308,11 +302,11 @@ class WiringBase:
                 ref_name = self._extract_placeholder_name(obj)
                 return _WiredRef(ref_name)
             return obj
-        if isinstance(obj, dict):
+        elif isinstance(obj, dict):
             return {k: self._resolve(v) for k, v in obj.items()}
-        if isinstance(obj, list):
+        elif isinstance(obj, list):
             return [self._resolve(v) for v in obj]
-        if isinstance(obj, tuple):
+        elif isinstance(obj, tuple):
             return tuple(self._resolve(v) for v in obj)
         return obj
 
@@ -387,11 +381,12 @@ class WiringBase:
             CircularWiringError: If circular dependencies detected
         """
         # Calculate in-degree (number of dependencies) for each node
-        # Only count dependencies that are also in the set being sorted
+        # Pre-convert to set for efficient intersection
+        all_nodes = set(dependencies.keys())
         in_degree: dict[str, int] = {}
         for node, deps in dependencies.items():
             # Filter to only dependencies within this set
-            internal_deps = deps & dependencies.keys()
+            internal_deps = deps & all_nodes
             in_degree[node] = len(internal_deps)
 
         # Start with nodes that have no dependencies (within this set)
@@ -459,13 +454,13 @@ class WiringBase:
 
             # Handle embedded placeholders via string interpolation
             return self._interpolate_placeholders(value, resolved, "constant")
-        if isinstance(value, dict):
+        elif isinstance(value, dict):
             return {
                 k: self._resolve_constant(v, resolved)
                 for k, v in value.items()
             }
-        if isinstance(value, list):
+        elif isinstance(value, list):
             return [self._resolve_constant(v, resolved) for v in value]
-        if isinstance(value, tuple):
+        elif isinstance(value, tuple):
             return tuple(self._resolve_constant(v, resolved) for v in value)
         return value

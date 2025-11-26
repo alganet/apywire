@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import re
+from operator import itemgetter
 from typing import Awaitable, Callable, Protocol, cast, final
 
 from apywire.constants import SYNTHETIC_CONST
@@ -154,20 +155,17 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         Returns:
             Tuple of (positional_args, keyword_args)
         """
-        args_list: list[tuple[int, object]] = []
-        kwargs_dict: dict[str, object] = {}
-
+        # Iterate once over data.items() to separate args and kwargs
+        args_list = []
+        kwargs_dict = {}
         for k, v in data.items():
             if isinstance(k, int):
                 args_list.append((k, v))
             else:
                 kwargs_dict[k] = v
 
-        # Sort positional args by index
-        def _sort_key(item: tuple[int, object]) -> int:
-            return item[0]
-
-        args_list.sort(key=_sort_key)
+        # Sort positional args by index and extract values
+        args_list.sort(key=itemgetter(0))
         pos_args = [v for _, v in args_list]
 
         return (pos_args, kwargs_dict)
@@ -244,8 +242,6 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
                     # All positional arguments
                     instance = constructor(*kwargs)
                 else:
-                    # Should not happen given _ResolvedSpecMapping type,
-                    # but for safety
                     instance = constructor(kwargs)
             except Exception as e:
                 raise WiringError(
@@ -267,9 +263,7 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         their accessors.
         """
         if isinstance(o, _WiredRef):
-            # Detect when a placeholder reference points to something that
-            # wasn't defined in the spec. This is an unknown placeholder
-            # and should raise a friendly error.
+            # Ensure placeholder was defined in spec
             if o.name not in self._values and o.name not in self._parsed:
                 ctx = f" while instantiating '{context}'" if context else ""
                 raise UnknownPlaceholderError(
@@ -280,11 +274,11 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
             # Call the accessor `self.name()` to get the runtime value.
             return cast(object, getattr(self, o.name)())
 
-        if isinstance(o, dict):
+        elif isinstance(o, dict):
             return {k: self._resolve_runtime(v, context) for k, v in o.items()}
-        if isinstance(o, list):
+        elif isinstance(o, list):
             return [self._resolve_runtime(v, context) for v in o]
-        if isinstance(o, tuple):
+        elif isinstance(o, tuple):
             return tuple(self._resolve_runtime(v, context) for v in o)
         return o
 
@@ -348,11 +342,12 @@ class Accessor:
 
     def __call__(self) -> object:
         """Return the wired object, instantiating it if necessary."""
-        # Fast path: check if already instantiated and cached in _values
-        # or as an attribute on the instance.
-        # We check _values first as it is the canonical storage.
-        if self._name in self._wiring._values:
+        # Fast path: EAFP pattern for cache lookup
+        # Try to get cached value directly (faster than check + get)
+        try:
             return self._wiring._values[self._name]
+        except KeyError:
+            pass
 
         # Not cached, so we need to instantiate it.
         # We use _instantiate_attr which handles thread safety if enabled.
@@ -381,9 +376,11 @@ class AioAccessor:
             )
 
         async def _get() -> object:
-            # If already cached, return immediately
-            if name in self._wiring._values:
+            # EAFP: Try cached value first
+            try:
                 return self._wiring._values[name]
+            except KeyError:
+                pass
 
             # If not cached, run instantiation in executor to avoid blocking
             # the event loop.
