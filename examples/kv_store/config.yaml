@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
+#
+# SPDX-License-Identifier: ISC
+
+# Wire a foreign object (fakeredis.FakeRedis) directly
+# We can pass constructor arguments just like any other object
+fakeredis.FakeRedis redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+  decode_responses: true
+
+# Wire our application, injecting the redis client
+__main__.KVApp app:
+  client: "{redis}"

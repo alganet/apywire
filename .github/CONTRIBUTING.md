@@ -3,24 +3,20 @@ SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
 
 SPDX-License-Identifier: ISC
 -->
-# Contributing
+# Contributing to apywire
 
-## Development Setup
+Thanks for your interest in contributing!
+
+For the complete development guide, please see **[docs/development.md](../docs/development.md)**.
+
+## Quick Start
 
 1. Clone the repository
-2. Install dependencies: `pip install -e .[dev]`
-3. Run tests: `make test`
+2. Run `make .venv && source .venv/bin/activate && make pip`
+3. Run `make all` to verify everything works
 
-## Commit Messages
+## Before Submitting a Pull Request
 
-Use meaningful titles and a brief body describing your changes.
-
-Commit titles must not exceed 72 characters.
-Commit body lines must not exceed 72 characters.
-
-## Code Quality
-
-- Format: `make format`
-- Lint: `make lint`
-- Test: `make test`
-- All: `make all`
+- **Development**: See [docs/development.md](../docs/development.md) for setup, testing, and workflow
+- **Code Standards**: All code must pass `make lint` and maintain test coverage requirements
+- **Commit Messages**: Keep titles ≤ 72 characters with meaningful descriptions

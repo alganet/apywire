@@ -5,43 +5,58 @@ SPDX-License-Identifier: ISC
 -->
 # AI Coding Guidelines for apywire
 
-## Overview
+For detailed development workflow and standards, see **[docs/development.md](docs/development.md)**.
+
+## Project Context
+
 apywire is a Python 3.12+ library for lazy object wiring and dependency injection. It uses spec-based configuration to instantiate objects on-demand with support for async access, thread safety, and code generation via Cython compilation.
 
-## Core API
+**Core API:**
 - **`Wiring(spec, thread_safe=False)`**: Main container for lazy instantiation from a spec dict
 - **`wired.name()`**: Returns callable `Accessor` that instantiates object on invocation
 - **`await wired.aio.name()`**: Async access via `AioAccessor` using `run_in_executor`
-- **`wired.compile(aio=False, thread_safe=False)`**: Generates equivalent Python code as a `Compiled` class
+- **`compiler = WiringCompiler(spec)`**: For compiling into python code instead of runtime
+- **`code = compiler.compile(aio=True, thread_safe=True)`**: Generate python code for the spec
 - **Spec Format**: `{"module.Class name": {"param": "value", "ref": "{otherName}"}}`
 
-## Architecture
-- **Lazy Loading**: Objects instantiated via `__getattr__` only when accessed, cached after first use
-- **Placeholders**: `{name}` in spec values resolve to other wired objects at instantiation
-- **Thread Safety**: Optional `thread_safe=True` uses optimistic per-attribute locking with global fallback via `CompiledThreadSafeMixin`
-- **Cython Build**: `setup.py` uses Cython to compile `wiring.py` → `wiring.c` with SPDX headers
-- **Equivalence**: Compiled output behaves identically to runtime `Wiring` (lazy, async, thread-safe)
+## Critical Architectural Patterns
 
-## Development Workflow
-- **Setup**: `make .venv` and `source .venv/bin/activate`, then `make pip`
-- **Check**: `make all` (format, lint, coverage, build)
-- **Test**: `pytest -xvs` (verbose), `make coverage` (95% required)
-- **Build**: `make build` (Cython compile), `make dist` (package)
-- **Clean**: `make clean` (remove artifacts/caches)
+**Lazy Loading via `__getattr__`:**
+Objects are instantiated only when accessed, using `__getattr__` to intercept attribute access and return `Accessor` callables that handle instantiation and caching.
 
-## Code Standards
-- **Typing**: Strict mypy with `disallow_any_*=true`, use `object` not `Any`
-- **Style**: 79-char lines, `black` + `isort` formatting
-- **Licensing**: SPDX headers required on all files, validate with `make reuse`
-- **Tests**: Cover sync, async (`test_compile_aio.py`), threading (`test_threading.py`), edge cases
+**Placeholder Resolution:**
+Strings like `{name}` in spec values are converted to `_WiredRef` markers during parsing, then resolved to actual objects at instantiation time. See `constants.py` for delimiter patterns.
 
-## Key Components
-- `apywire/wiring.py`: `Wiring`, `Accessor`, `AioAccessor`, `compile()` method
-- `apywire/thread_safety.py`: `CompiledThreadSafeMixin` with optimistic/global locking
-- `apywire/exceptions.py`: `WiringError`, `CircularWiringError`, `UnknownPlaceholderError`, `LockUnavailableError`
-- `setup.py`: Cython build config with SPDX header injection
+**Thread Safety Model:**
+Uses optimistic per-attribute locking (`dict[str, threading.Lock]`) with a global fallback lock. Thread-local state tracks the resolving stack for circular dependency detection. See `threads.py` for `ThreadSafeMixin` implementation.
 
-## Examples
+**Compilation Equivalence:**
+Generated code must behave identically to runtime `Wiring`. The compiler generates accessor methods that replicate lazy loading, caching, and optional async/thread-safe behavior.
+
+## AI-Specific Development Notes
+
+**Strict Mypy Configuration:**
+The project uses extremely strict mypy settings including `disallow_any_expr=true`. Never use `Any`—use `object` instead. All functions need complete type annotations. See [Code Standards](docs/development.md#type-annotations) for details.
+
+**Module Structure:**
+- `wiring.py`: Base class `WiringBase`, type system, placeholder parsing
+- `runtime.py`: Runtime `Wiring` class with `Accessor`/`AioAccessor`
+- `compiler.py`: Code generation via `WiringCompiler`
+- `threads.py`: Thread safety mixins and utilities
+- `exceptions.py`: Custom exception classes
+- `constants.py`: Shared constants (placeholder patterns, delimiters)
+
+**Testing Requirements:**
+All changes must maintain 100% branch coverage. Test both runtime and compiled behavior, plus async and thread-safe variants where applicable. Use descriptive test names: `test_<feature>_<scenario>_<expected_behavior>()`.
+
+**Common Gotchas:**
+- SPDX headers required on all files (run `make format` to auto-add)
+- 79-character line limit enforced by `black`
+- Compiled output is verified against runtime behavior in tests
+- Thread-safe tests use actual threading to verify lock behavior
+
+## Quick Reference
+
 ```python
 # Basic lazy access
 wired = Wiring({"datetime.datetime now": {"year": 2025}})
@@ -54,5 +69,13 @@ obj = await wired.aio.now()
 wired = Wiring(spec, thread_safe=True)
 
 # Code generation
-code = wired.compile(aio=True, thread_safe=True)
+compiler = WiringCompiler(spec)
+code = compiler.compile(aio=True, thread_safe=True)
 ```
+
+**Make Commands:**
+- `make all` - Complete check (format, lint, coverage, build)
+- `make test` - Run pytest suite
+- `make coverage` - Check coverage requirements
+- `make lint` - Run reuse, flake8, mypy
+- `make format` - Run black, isort, add SPDX headers

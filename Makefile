@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: ISC
 
-.PHONY: all format lint test coverage clean publish pip reuse .venv
+.PHONY: all format lint test coverage clean publish pip reuse .venv docs-serve docs-build
 
 all: format lint coverage build
 
@@ -50,3 +50,9 @@ dist:
 
 publish:
 	python -m twine upload dist/*
+
+docs-serve:
+	python -m mkdocs serve
+
+docs-build:
+	python -m mkdocs build
