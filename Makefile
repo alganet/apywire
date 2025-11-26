@@ -48,7 +48,15 @@ build:
 dist:
 	python -m build
 
-publish:
+repair-wheels:
+	python -m pip install --upgrade auditwheel
+	auditwheel repair dist/*.whl -w dist/repaired
+	rm -f dist/*.whl
+	mv dist/repaired/*.whl dist/
+	rm -rf dist/repaired
+
+publish: dist repair-wheels
+	python -m pip install --upgrade twine
 	python -m twine upload dist/*
 
 docs-serve:
