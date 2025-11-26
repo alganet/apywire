@@ -4,6 +4,7 @@
 
 # Project Specific
 apywire/**.c
+site/
 
 # General
 .venv/

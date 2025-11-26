@@ -10,12 +10,13 @@ Brief description of changes.
 ## Type of Change
 
 - [ ] Bug fix
+- [ ] Refactoring
 - [ ] New feature
 - [ ] Breaking change
 - [ ] Documentation update
 
 ## Checklist
 
-- [ ] Tests pass
-- [ ] Code formatted
+- [ ] Descriptive and concise commit message and PR details
+- [ ] Docstrings updated
 - [ ] Documentation updated
