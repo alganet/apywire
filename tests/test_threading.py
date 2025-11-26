@@ -711,9 +711,9 @@ def test_optimistic_mode_cleanup() -> None:
     """Test optimistic mode cleanup after successful instantiation."""
     from unittest.mock import MagicMock
 
-    from apywire.threads import CompiledThreadSafeMixin
+    from apywire.threads import ThreadSafeMixin
 
-    class MockContainer(CompiledThreadSafeMixin):
+    class MockContainer(ThreadSafeMixin):
         def __init__(self) -> None:
             self._init_thread_safety()
             self._values: dict[str, object] = {}

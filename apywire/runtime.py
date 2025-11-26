@@ -18,7 +18,7 @@ from apywire.exceptions import (
     UnknownPlaceholderError,
     WiringError,
 )
-from apywire.threads import CompiledThreadSafeMixin
+from apywire.threads import ThreadSafeMixin
 from apywire.wiring import (
     Spec,
     SpecEntry,
@@ -48,7 +48,7 @@ class _Constructor(Protocol):
     def __call__(self, *args: object, **kwargs: object) -> object: ...
 
 
-class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
+class WiringRuntime(WiringBase, ThreadSafeMixin):
     """Runtime container for wired objects.
 
     This class handles the runtime resolution and instantiation of wired
@@ -79,6 +79,8 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
             max_lock_attempts=max_lock_attempts,
             lock_retry_sleep=lock_retry_sleep,
         )
+        if self._thread_safe:
+            self._init_thread_safety(max_lock_attempts, lock_retry_sleep)
 
     def _init_thread_safety(
         self,
@@ -86,14 +88,14 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
         lock_retry_sleep: float = 0.01,
     ) -> None:
         """Initialize thread safety mixin."""
-        CompiledThreadSafeMixin._init_thread_safety(
+        ThreadSafeMixin._init_thread_safety(
             self, max_lock_attempts, lock_retry_sleep
         )
 
     def _get_resolving_stack(self) -> list[str]:
         """Return the resolving stack for the current context."""
         if self._thread_safe:
-            return CompiledThreadSafeMixin._get_resolving_stack(self)
+            return ThreadSafeMixin._get_resolving_stack(self)
         return self._resolving_stack
 
     def __getattr__(self, name: str) -> Accessor:
@@ -124,13 +126,13 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
     ) -> object:
         """Instantiate an attribute using the configured strategy.
 
-        If thread_safe is True, uses the CompiledThreadSafeMixin implementation
+        If thread_safe is True, uses the ThreadSafeMixin implementation
         which handles optimistic locking and global fallback.
         If thread_safe is False, uses a simple direct instantiation.
         """
         if self._thread_safe:
             # Use the mixin's implementation which handles locking
-            return CompiledThreadSafeMixin._instantiate_attr(self, name, maker)
+            return ThreadSafeMixin._instantiate_attr(self, name, maker)
 
         # Non-thread-safe path: simple check and set
         if name in self._values:
@@ -206,26 +208,31 @@ class WiringRuntime(WiringBase, CompiledThreadSafeMixin):
                     f"Unknown placeholder '{name}' referenced."
                 )
 
-            module_name, class_name, factory_method, data = self._parsed[name]
+            entry = self._parsed[name]
 
             # Check for synthetic auto-promoted constant
-            if module_name == SYNTHETIC_CONST and class_name == "str":
+            if (
+                entry.module_name == SYNTHETIC_CONST
+                and entry.class_name == "str"
+            ):
                 # This is an auto-promoted constant with string interpolation
-                value = self._format_string_constant(data, context=name)
+                value = self._format_string_constant(entry.data, context=name)
                 self._values[name] = value
                 return value
 
-            module = importlib.import_module(module_name)
-            cls = cast(_Constructor, getattr(module, class_name))
+            module = importlib.import_module(entry.module_name)
+            cls = cast(_Constructor, getattr(module, entry.class_name))
 
             # If a factory method is specified, get it from the class
-            if factory_method:
-                constructor = cast(_Constructor, getattr(cls, factory_method))
+            if entry.factory_method:
+                constructor = cast(
+                    _Constructor, getattr(cls, entry.factory_method)
+                )
             else:
                 constructor = cls
 
             # Resolve arguments
-            kwargs = self._resolve_runtime(data, context=name)
+            kwargs = self._resolve_runtime(entry.data, context=name)
 
             try:
                 if isinstance(kwargs, dict):

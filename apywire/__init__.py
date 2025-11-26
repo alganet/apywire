@@ -12,6 +12,7 @@ from .exceptions import (
     WiringError,
 )
 from .runtime import Accessor, AioAccessor, Spec, SpecEntry, WiringRuntime
+from .threads import ThreadSafeMixin
 from .wiring import WiringBase
 
 Wiring = WiringRuntime
@@ -19,6 +20,7 @@ Wiring = WiringRuntime
 __all__ = [
     "Spec",
     "SpecEntry",
+    "ThreadSafeMixin",
     "Wiring",
     "WiringRuntime",
     "WiringCompiler",

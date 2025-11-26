@@ -19,7 +19,7 @@ from apywire.constants import CACHE_ATTR_PREFIX
 from apywire.exceptions import LockUnavailableError
 
 
-class ThreadLocalState(threading.local):
+class _ThreadLocalState(threading.local):
     """Typed thread-local storage for wiring resolution state.
 
     This class provides properly typed attributes to avoid mypy Any propagation
@@ -32,12 +32,14 @@ class ThreadLocalState(threading.local):
         held_locks: List of locks currently held by this thread.
     """
 
-    resolving_stack: list[str]
-    mode: Literal["optimistic", "global"] | None
-    held_locks: list[threading.RLock]
+    def __init__(self) -> None:
+        super().__init__()
+        self.resolving_stack: list[str] = []
+        self.mode: Literal["optimistic", "global"] | None = None
+        self.held_locks: list[threading.RLock] = []
 
 
-class CompiledThreadSafeMixin:
+class ThreadSafeMixin:
     """Mixin that provides thread-safety helpers for wiring containers.
 
     This mixin is used by both runtime `Wiring` and compiled `Compiled`
@@ -63,7 +65,7 @@ class CompiledThreadSafeMixin:
         self._inst_lock = threading.RLock()
         self._attr_locks: dict[str, threading.RLock] = {}
         self._attr_locks_lock = threading.Lock()
-        self._local: ThreadLocalState = ThreadLocalState()
+        self._local: _ThreadLocalState = _ThreadLocalState()
         self._max_lock_attempts = max_lock_attempts
         self._lock_retry_sleep = lock_retry_sleep
 
@@ -74,18 +76,12 @@ class CompiledThreadSafeMixin:
             return self._attr_locks[name]
 
     def _get_resolving_stack(self) -> list[str]:
-        if not hasattr(self._local, "resolving_stack"):
-            self._local.resolving_stack = []
         return self._local.resolving_stack
 
     def _get_held_locks(self) -> list[threading.RLock]:
-        if not hasattr(self._local, "held_locks"):
-            self._local.held_locks = []
         return self._local.held_locks
 
     def _release_held_locks(self) -> None:
-        if not hasattr(self._local, "held_locks"):
-            return
         for lock in reversed(self._local.held_locks):
             lock.release()
         self._local.held_locks.clear()
@@ -156,7 +152,7 @@ class CompiledThreadSafeMixin:
             return value
 
         lock = self._get_attribute_lock(name)
-        mode: str | None = getattr(self._local, "mode", None)
+        mode = self._local.mode
         if mode is None:
             # Optimistic locking: Try to acquire per-attribute lock without
             # blocking. If successful, instantiate in optimistic mode.
@@ -192,13 +188,7 @@ class CompiledThreadSafeMixin:
                         return inst
                 finally:
                     # Clean up optimistic mode when exiting top-level call
-                    if (
-                        cast(
-                            Literal["optimistic", "global"] | None,
-                            getattr(self._local, "mode", None),
-                        )
-                        == "optimistic"
-                    ):
+                    if self._local.mode == "optimistic":
                         self._local.mode = None
 
             # fallback to global

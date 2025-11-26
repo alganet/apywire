@@ -10,10 +10,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from apywire.exceptions import LockUnavailableError, WiringError
-from apywire.threads import CompiledThreadSafeMixin
+from apywire.threads import ThreadSafeMixin
 
 
-class MockContainer(CompiledThreadSafeMixin):
+class MockContainer(ThreadSafeMixin):
     # Dynamic attributes for testing
     _bar: str
     _race: str
@@ -27,7 +27,7 @@ class MockContainer(CompiledThreadSafeMixin):
 
 
 def test_thread_safety_init_and_helpers() -> None:
-    """Test initialization and basic helpers of CompiledThreadSafeMixin."""
+    """Test initialization and basic helpers of ThreadSafeMixin."""
     container = MockContainer()
 
     # Test _get_resolving_stack initialization
@@ -257,12 +257,12 @@ def test_compile_aio_threaded_full_output() -> None:
     expected = dedent(
         """\
         from apywire.exceptions import LockUnavailableError
-        from apywire.threads import CompiledThreadSafeMixin
+        from apywire.threads import ThreadSafeMixin
         import asyncio
         import datetime
 
 
-        class Compiled(CompiledThreadSafeMixin):
+        class Compiled(ThreadSafeMixin):
 
             def __init__(self):
                 self._init_thread_safety()
@@ -329,7 +329,7 @@ def test_compile_complex_ast_replacement() -> None:
 def test_instantiate_attr_no_values_mapping() -> None:
     """Test _instantiate_attr when _values mapping is missing."""
 
-    class MockContainerNoValues(CompiledThreadSafeMixin):
+    class MockContainerNoValues(ThreadSafeMixin):
         def __init__(self) -> None:
             self._init_thread_safety()
             # No _values attribute
@@ -542,7 +542,10 @@ def test_runtime_invalid_constructor_data_type() -> None:
         wired = Wiring(spec, thread_safe=False)
 
         # Override _parsed with invalid data (not dict or list)
-        wired._parsed["obj"] = (
+        from apywire.wiring import _ParsedEntry
+
+        # Override _parsed with invalid data (not dict or list)
+        wired._parsed["obj"] = _ParsedEntry(
             "test_invalid_data",
             "MyClass",
             None,

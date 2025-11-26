@@ -604,12 +604,12 @@ class WiringCompiler(WiringBase):
             modules.add("apywire.exceptions")
         for module in sorted(modules):
             if module == "apywire.threads":
-                # Import CompiledThreadSafeMixin from threads
+                # Import ThreadSafeMixin from threads
                 body.append(
                     ast.ImportFrom(
                         module="apywire.threads",
                         names=[
-                            ast.alias(name="CompiledThreadSafeMixin"),
+                            ast.alias(name="ThreadSafeMixin"),
                         ],
                         level=0,
                     )
@@ -658,25 +658,23 @@ class WiringCompiler(WiringBase):
                 type_params=[],
             )
             class_body.insert(0, init_def)
-        for name, (
-            module_name,
-            class_name,
-            factory_method,
-            data,
-        ) in self._parsed.items():
+        for name, entry in self._parsed.items():
             # Skip synthetic auto-promoted constants
             # These require runtime interpolation and can't be pre-computed
-            if module_name == SYNTHETIC_CONST and class_name == "str":
+            if (
+                entry.module_name == SYNTHETIC_CONST
+                and entry.class_name == "str"
+            ):
                 continue
 
             # Regular wired object
             class_body.append(
                 self._compile_property(
                     name,
-                    module_name,
-                    class_name,
-                    factory_method,
-                    cast(_ResolvedSpecMapping, data),
+                    entry.module_name,
+                    entry.class_name,
+                    entry.factory_method,
+                    cast(_ResolvedSpecMapping, entry.data),
                     aio=aio,
                     thread_safe=thread_safe,
                 )
@@ -696,14 +694,12 @@ class WiringCompiler(WiringBase):
 
         class_body = [ast.Pass()] if not class_body else class_body
         # When using thread_safe compiled output we will rely on the
-        # CompiledThreadSafeMixin and _LockUnavailableError imported from
+        # ThreadSafeMixin and _LockUnavailableError imported from
         # apywire.threads rather than embedding helper code.
         # Build class definition
         class_bases: list[ast.expr] = []
         if thread_safe:
-            class_bases.append(
-                ast.Name(id="CompiledThreadSafeMixin", ctx=ast.Load())
-            )
+            class_bases.append(ast.Name(id="ThreadSafeMixin", ctx=ast.Load()))
         class_def = ast.ClassDef(
             name="Compiled",
             bases=class_bases,
