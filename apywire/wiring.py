@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 from collections import deque
 from types import EllipsisType
-from typing import TypeAlias, cast
+from typing import NamedTuple, TypeAlias, cast
 
 from apywire.constants import (
     PLACEHOLDER_END,
@@ -29,7 +29,6 @@ from apywire.constants import (
     SYNTHETIC_CONST,
 )
 from apywire.exceptions import CircularWiringError, UnknownPlaceholderError
-from apywire.threads import ThreadLocalState
 
 _ConstantValue: TypeAlias = (
     str | bytes | bool | int | float | complex | EllipsisType | None
@@ -91,20 +90,24 @@ _ResolvedSpecMapping: TypeAlias = (
 )
 Spec: TypeAlias = dict[str, _SpecMapping | _ConstantValue]
 
-# Type aliases for parsed spec entries
-_ParsedEntry: TypeAlias = tuple[
-    str, str, str | None, _ResolvedSpecMapping | str | _WiredRef
-]  # (module, class, factory_method, data)
-_UnresolvedParsedEntry: TypeAlias = tuple[
-    str, str, str, str | None, _SpecMapping
-]  # (module, class, name, factory_method, data)
+
+class _ParsedEntry(NamedTuple):
+    """A parsed wiring entry ready for instantiation."""
+
+    module_name: str
+    class_name: str
+    factory_method: str | None
+    data: _ResolvedSpecMapping | str | _WiredRef
 
 
-class _ThreadLocalState(ThreadLocalState):
-    """Thread-local state for wiring resolution.
+class _UnresolvedParsedEntry(NamedTuple):
+    """An intermediate parsed entry before placeholder resolution."""
 
-    Inherits from ThreadLocalState to get properly typed attributes.
-    """
+    module_name: str
+    class_name: str
+    name: str
+    factory_method: str | None
+    data: _SpecMapping
 
 
 class WiringBase:
@@ -150,13 +153,13 @@ class WiringBase:
 
         # Parse wired objects first
         self._parsed: dict[str, _ParsedEntry] = {
-            name: (
-                module_name,
-                class_name,
-                factory_method,
-                cast(_ResolvedSpecMapping, self._resolve(value)),
+            entry.name: _ParsedEntry(
+                entry.module_name,
+                entry.class_name,
+                entry.factory_method,
+                cast(_ResolvedSpecMapping, self._resolve(entry.data)),
             )
-            for module_name, class_name, name, factory_method, value in parsed
+            for entry in parsed
         }
 
         # Classify constants by placeholder type
@@ -227,19 +230,13 @@ class WiringBase:
         # Create synthetic parsed entries for auto-promoted constants
         for key, value in const_with_wired_refs.items():
             # Create a synthetic entry that will format the string at runtime
-            self._parsed[key] = (
+            self._parsed[key] = _ParsedEntry(
                 SYNTHETIC_CONST,  # Synthetic module marker
                 "str",  # Will use string formatting
                 None,  # No factory method
                 cast(str | _WiredRef, self._resolve(value)),
             )
-        if self._thread_safe:
-            # Thread-safe mode: use mixin helpers for lock state.
-            # Note: Derived classes must implement _init_thread_safety
-            # if they support thread safety (like WiringRuntime).
-            if hasattr(self, "_init_thread_safety"):
-                self._init_thread_safety(max_lock_attempts, lock_retry_sleep)
-        else:
+        if not self._thread_safe:
             # Non-thread-safe mode: use simple list for resolving stack
             self._resolving_stack: list[str] = []
 
@@ -276,7 +273,7 @@ class WiringBase:
                 f"invalid spec key '{key}': missing module qualification"
             )
 
-        return (
+        return _UnresolvedParsedEntry(
             module_name,
             class_name,
             name,
