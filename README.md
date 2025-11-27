@@ -40,6 +40,9 @@ wired = Wiring(spec)
 service = wired.service()  # Lazy instantiation + caching
 ```
 
+`spec` is a plain dictionary. It can be written in Python, or come from a
+[config file](docs/user-guide/configuration-files.md), apywire doesn't care.
+
 ## Documentation
 
 📚 **[Full Documentation](docs/index.md)** • [Getting Started](docs/getting-started.md) • [API Reference](docs/api-reference.md) • [Examples](docs/examples.md)
@@ -53,7 +56,7 @@ make docs-serve  # http://127.0.0.1:8000
 
 ```bash
 make .venv && source .venv/bin/activate  # Setup
-make all                                  # Format, lint, test, build
+make all                                 # Format, lint, test, build
 ```
 
 See [docs/development.md](docs/development.md) for guidelines.
