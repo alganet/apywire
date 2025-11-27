@@ -38,6 +38,8 @@ async def main():
 asyncio.run(main())
 ```
 
+This is especially useful for [factory methods](advanced.md#factory-methods) that perform I/O operations.
+
 ## How It Works
 
 When you use `.aio`, apywire wraps the object instantiation in an executor:

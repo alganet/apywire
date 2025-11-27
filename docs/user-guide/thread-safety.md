@@ -34,6 +34,9 @@ wired = Wiring(spec, thread_safe=True)
 - Single-threaded applications
 - Each thread has its own `Wiring` container instance
 
+Rule of thumb: If you're not sure if you need thread-safe containers, you probably
+don't need them.
+
 ## How It Works
 
 apywire uses a two-level locking strategy:
