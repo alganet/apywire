@@ -39,6 +39,14 @@ Comprehensive API documentation for apywire.
     options:
       show_source: false
 
+### Generator
+
+::: apywire.Generator
+        options:
+            show_source: false
+            members:
+                - generate
+
 ## Accessor Types
 
 ### Accessor
@@ -222,6 +230,21 @@ code = compiler.compile(aio=True, thread_safe=True)
 
 with open("compiled_wiring.py", "w") as f:
     f.write(code)
+```
+
+### Generator (Spec Generator)
+
+```python
+from apywire import Generator, Wiring
+
+# Generate a spec from a class signature
+spec = Generator.generate("myapp.models.Simple now")
+
+# Override a generated default if needed
+spec["now_year"] = 2025
+
+wired = Wiring(spec)
+now = wired.now()
 ```
 
 ## See Also

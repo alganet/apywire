@@ -25,6 +25,9 @@ Understand thread-safe instantiation, optimistic locking mechanisms, and configu
 ### [Compilation](compilation.md)
 Learn how to generate standalone Python code from your wiring specs using `WiringCompiler` for production deployment and performance optimization.
 
+### [Spec Generation](generator.md)
+Quickly scaffold wiring specs from class constructor signatures using `Generator`.
+
 ### [Advanced Features](advanced.md)
 Explore advanced capabilities including factory methods, positional arguments, complex nested dependencies, error handling, and best practices.
 
@@ -47,6 +50,7 @@ Looking for something specific?
 - **Multi-threaded app?** → [Thread Safety](thread-safety.md)
 - **Production deployment?** → [Compilation](compilation.md)
 - **Complex use cases?** → [Advanced Features](advanced.md)
+- **Scaffold specs quickly?** → [Spec Generation](generator.md)
 
 ## Common Workflows
 
