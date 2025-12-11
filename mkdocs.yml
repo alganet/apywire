@@ -43,6 +43,7 @@ nav:
       - Async Support: user-guide/async-support.md
       - Thread Safety: user-guide/thread-safety.md
       - Compilation: user-guide/compilation.md
+      - Generator: user-guide/generator.md
       - Advanced Features: user-guide/advanced.md
   - API Reference: api-reference.md
   - Examples: examples.md

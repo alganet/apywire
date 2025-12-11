@@ -11,6 +11,7 @@ from .exceptions import (
     UnknownPlaceholderError,
     WiringError,
 )
+from .generator import Generator
 from .runtime import Accessor, AioAccessor, Spec, SpecEntry, WiringRuntime
 from .threads import ThreadSafeMixin
 from .wiring import WiringBase
@@ -31,4 +32,5 @@ __all__ = [
     "LockUnavailableError",
     "Accessor",
     "AioAccessor",
+    "Generator",
 ]
