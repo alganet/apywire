@@ -51,6 +51,7 @@ dev = [
     "pytest",
     "reuse",
     "twine",
+    "tomli_w",
     "types-setuptools",
 ]
 

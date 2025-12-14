@@ -98,7 +98,7 @@ def test_cli_help_output_format() -> None:
     assert exc_info.value.code == 0
     stdout_output = mock_stdout.getvalue()
     assert "usage: apywire" in stdout_output
-    assert "A package to wire up objects" in stdout_output
+    assert "dependency injection" in stdout_output
     assert "-h, --help" in stdout_output
     assert "-v, --version" in stdout_output
 
@@ -168,3 +168,206 @@ def test_cli_module_execution() -> None:
     # Should exit successfully and output version
     assert result.returncode == 0
     assert "apywire" in result.stdout  # argparse outputs to stdout
+
+
+def test_cli_generate_json() -> None:
+    """Test generate command with JSON format."""
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        result = main(
+            ["generate", "--format", "json", "collections.OrderedDict d"]
+        )
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "collections.OrderedDict d" in output
+
+
+def test_cli_generate_ini() -> None:
+    """Test generate command with INI format."""
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        result = main(
+            ["generate", "--format", "ini", "collections.OrderedDict d"]
+        )
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "[collections.OrderedDict d]" in output
+
+
+def test_cli_generate_toml() -> None:
+    """Test generate command with TOML format."""
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        result = main(
+            ["generate", "--format", "toml", "collections.OrderedDict d"]
+        )
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert '["collections.OrderedDict d"]' in output
+
+
+def test_cli_generate_multiple_entries() -> None:
+    """Test generate command with multiple entries."""
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        result = main(
+            [
+                "generate",
+                "--format",
+                "json",
+                "collections.OrderedDict a",
+                "collections.OrderedDict b",
+            ]
+        )
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "collections.OrderedDict a" in output
+    assert "collections.OrderedDict b" in output
+
+
+def test_cli_compile_json_stdin() -> None:
+    """Test compile command with JSON from stdin."""
+    json_input = '{"collections.OrderedDict d": {}}'
+    with patch("sys.stdin", StringIO(json_input)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(["compile", "--format", "json", "-"])
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "class Compiled:" in output
+    assert "def d(self):" in output
+
+
+def test_cli_compile_ini_stdin() -> None:
+    """Test compile command with INI from stdin."""
+    ini_input = "[collections.OrderedDict d]\n"
+    with patch("sys.stdin", StringIO(ini_input)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(["compile", "--format", "ini", "-"])
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "class Compiled:" in output
+
+
+def test_cli_compile_toml_stdin() -> None:
+    """Test compile command with TOML from stdin."""
+    toml_input = '["collections.OrderedDict d"]\n'
+    with patch("sys.stdin", StringIO(toml_input)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(["compile", "--format", "toml", "-"])
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "class Compiled:" in output
+
+
+def test_cli_compile_with_aio_flag() -> None:
+    """Test compile command with --aio flag."""
+    json_input = '{"collections.OrderedDict d": {}}'
+    with patch("sys.stdin", StringIO(json_input)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(["compile", "--format", "json", "--aio", "-"])
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "async def d(self):" in output
+
+
+def test_cli_compile_with_thread_safe_flag() -> None:
+    """Test compile command with --thread-safe flag."""
+    json_input = '{"collections.OrderedDict d": {}}'
+    with patch("sys.stdin", StringIO(json_input)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(
+                ["compile", "--format", "json", "--thread-safe", "-"]
+            )
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "class Compiled(ThreadSafeMixin):" in output
+
+
+def test_cli_compile_from_file() -> None:
+    """Test compile command reading from a file."""
+    import os
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as f:
+        f.write('{"collections.OrderedDict d": {}}')
+        temp_file = f.name
+
+    try:
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(["compile", "--format", "json", temp_file])
+
+        assert result == 0
+        output = mock_stdout.getvalue()
+        assert "class Compiled:" in output
+    finally:
+        os.unlink(temp_file)
+
+
+def test_cli_compile_json_parsing_error() -> None:
+    """Test CLI error handling for invalid JSON input."""
+    json_input = '{"invalid": json content}'
+
+    with patch("sys.stdin", StringIO(json_input)):
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            result = main(["compile", "--format", "json", "-"])
+
+    assert result == 1  # Should return error code
+    stderr_output = mock_stderr.getvalue()
+    assert "Error parsing JSON content:" in stderr_output
+
+
+def test_cli_compile_toml_parsing_error() -> None:
+    """Test CLI error handling for invalid TOML input."""
+    toml_input = '["invalid toml content'
+
+    with patch("sys.stdin", StringIO(toml_input)):
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            result = main(["compile", "--format", "toml", "-"])
+
+    assert result == 1  # Should return error code
+    stderr_output = mock_stderr.getvalue()
+    assert "Error parsing TOML content:" in stderr_output
+
+
+def test_cli_compile_ini_parsing_error() -> None:
+    """Test CLI error handling for invalid INI input."""
+    ini_input = "[invalid section\nkey = value"
+
+    with patch("sys.stdin", StringIO(ini_input)):
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            result = main(["compile", "--format", "ini", "-"])
+
+    assert result == 1  # Should return error code
+    stderr_output = mock_stderr.getvalue()
+    assert "Error parsing INI content:" in stderr_output
+
+
+def test_cli_generate_toml_write_error() -> None:
+    """Test CLI error handling for TOML write when tomli_w is not available."""
+    # Temporarily disable tomli_w
+    import apywire.formats
+
+    original_tomli_w = apywire.formats._tomli_w
+    apywire.formats._tomli_w = None
+
+    try:
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            result = main(
+                ["generate", "--format", "toml", "collections.OrderedDict d"]
+            )
+
+        assert result == 1  # Should return error code
+        stderr_output = mock_stderr.getvalue()
+        assert "Error generating TOML output:" in stderr_output
+        assert "TOML output requires tomli_w" in stderr_output
+
+    finally:
+        # Restore tomli_w
+        apywire.formats._tomli_w = original_tomli_w

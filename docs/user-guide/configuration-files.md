@@ -6,7 +6,7 @@ SPDX-License-Identifier: ISC
 
 # Configuration Files
 
-Since apywire specs are just Python dictionaries, you can load them from any configuration file format: YAML, TOML, JSON, INI, or any other format that converts to Python data structures.
+apywire supports loading specs from JSON, TOML, and INI configuration files. The `apywire.formats` module provides utilities for parsing and serializing specs in these formats.
 
 ## Why Use Configuration Files?
 
@@ -14,255 +14,139 @@ Since apywire specs are just Python dictionaries, you can load them from any con
 - **Environment-Specific**: Different configs for dev, staging, production
 - **Version Control**: Track configuration changes
 - **Non-Developers**: Allow non-programmers to modify configuration
-- **Validation**: Use schema validation tools for your config format
+- **CLI Workflow**: Generate specs with CLI, edit, then compile
 
-## YAML
+## Quick Start with CLI
 
-YAML is readable and supports complex nested structures.
+The fastest way to create a configuration file is using the CLI:
 
-### Example: `config.yaml`
+```bash
+# Generate a spec from class introspection
+python -m apywire generate --format toml "datetime.datetime now" > config.toml
 
-```yaml
-# Database configuration
-database_url: postgresql://localhost/mydb
-pool_min: 1
-pool_max: 20
-
-# Database connection pool
-psycopg2.pool.ThreadedConnectionPool pool:
-  minconn: "{pool_min}"
-  maxconn: "{pool_max}"
-  dsn: "{database_url}"
-
-# Redis cache
-redis_url: redis://localhost:6379
-redis.Redis cache:
-  url: "{redis_url}"
-
-# Application service
-MyService service:
-  db: "{pool}"
-  cache: "{cache}"
-  debug: true
+# Edit config.toml to customize values, then compile
+python -m apywire compile --format toml config.toml > wiring.py
 ```
 
-### Loading YAML
+See [Command Line Interface](cli.md) for full CLI documentation.
 
-```python
-import yaml
-from apywire import Wiring
+## Supported Formats
 
-# Load spec from YAML file
-with open("config.yaml", "r") as f:
-    spec = yaml.safe_load(f)
+### JSON
 
-wired = Wiring(spec, thread_safe=True)
-service = wired.service()
-```
+JSON provides direct mapping with no conversion needed.
 
-### YAML Benefits
-
-- ✅ Very human-readable
-- ✅ Supports comments
-- ✅ Native support for lists, dicts, booleans
-- ✅ Multi-line strings
-- ❌ Requires `pyyaml` package
-
-## TOML
-
-TOML is Python-friendly and great for structured configuration.
-
-### Example: `config.toml`
-
-```toml
-# Database configuration
-database_url = "postgresql://localhost/mydb"
-pool_min = 1
-pool_max = 20
-
-# Redis
-redis_url = "redis://localhost:6379"
-
-# Database connection pool
-["psycopg2.pool.ThreadedConnectionPool pool"]
-minconn = "{pool_min}"
-maxconn = "{pool_max}"
-dsn = "{database_url}"
-
-# Redis cache
-["redis.Redis cache"]
-url = "{redis_url}"
-
-# Application service
-["MyService service"]
-db = "{pool}"
-cache = "{cache}"
-debug = true
-```
-
-!!! note "TOML Section Names with Spaces"
-    TOML section names with spaces must be quoted: `["module.Class name"]`
-
-### Loading TOML
-
-```python
-import tomllib  # Python 3.11+, or use 'tomli' package
-from apywire import Wiring
-
-# Load TOML file
-with open("config.toml", "rb") as f:
-    spec = tomllib.load(f)
-
-# Use directly - TOML structure matches apywire spec format!
-wired = Wiring(spec)
-```
-
-### TOML Benefits
-
-- ✅ Built into Python 3.11+ (`tomllib`)
-- ✅ Type-safe (strict types)
-- ✅ Supports comments
-- ✅ Good for structured data
-- ✅ Dots in section names work perfectly
-- ✅ No conversion needed!
-
-## JSON
-
-JSON is universal and works everywhere.
-
-### Example: `config.json`
+**Example: `config.json`**
 
 ```json
 {
   "database_url": "postgresql://localhost/mydb",
-  "pool_min": 1,
-  "pool_max": 20,
-  "redis_url": "redis://localhost:6379",
+  "pool_size": 20,
 
-  "psycopg2.pool.ThreadedConnectionPool pool": {
-    "minconn": "{pool_min}",
-    "maxconn": "{pool_max}",
-    "dsn": "{database_url}"
-  },
-
-  "redis.Redis cache": {
-    "url": "{redis_url}"
-  },
-
-  "MyService service": {
-    "db": "{pool}",
-    "cache": "{cache}",
-    "debug": true
+  "myapp.Database db": {
+    "url": "{database_url}",
+    "pool_size": "{pool_size}"
   }
 }
 ```
 
-### Loading JSON
+**Loading:**
 
 ```python
-import json
 from apywire import Wiring
+from apywire.formats import json_to_spec
 
-# Load spec from JSON file
-with open("config.json", "r") as f:
-    spec = json.load(f)
+with open("config.json") as f:
+    spec = json_to_spec(f.read())
 
 wired = Wiring(spec)
-service = wired.service()
+db = wired.db()
 ```
 
-### JSON Benefits
+**Benefits:**
 
 - ✅ Built into Python standard library
 - ✅ Universal format
-- ✅ Easy to generate programmatically
-- ✅ Works with REST APIs
+- ✅ No conversion needed
 - ❌ No comments
-- ❌ Verbose syntax
 
-## INI/CFG
+### TOML
 
-INI files are simple and widely used for configuration.
+TOML is Python-friendly with top-level keys as constants and tables as wiring entries.
 
-### Example: `config.ini`
+**Example: `config.toml`**
+
+```toml
+# Constants as top-level keys
+database_url = "postgresql://localhost/mydb"
+pool_size = 20
+
+# Wiring entries as tables (quote names with spaces)
+["myapp.Database db"]
+url = "{database_url}"
+pool_size = "{pool_size}"
+```
+
+!!! note "Quoted Section Names"
+    TOML section names with spaces must be quoted: `["module.Class name"]`
+
+**Loading:**
+
+```python
+from apywire import Wiring
+from apywire.formats import toml_to_spec
+
+with open("config.toml") as f:
+    spec = toml_to_spec(f.read())
+
+wired = Wiring(spec)
+```
+
+**Benefits:**
+
+- ✅ Built into Python 3.11+ (`tomllib`)
+- ✅ Supports comments
+- ✅ Type-safe (integers, booleans, etc.)
+- ✅ Clean syntax for nested structures
+
+### INI
+
+INI uses a `[constants]` section for constants (required by the format).
+
+**Example: `config.ini`**
 
 ```ini
 [constants]
 database_url = postgresql://localhost/mydb
-pool_min = 1
-pool_max = 20
-redis_url = redis://localhost:6379
+pool_size = 20
 
-[psycopg2.pool.ThreadedConnectionPool pool]
-minconn = {pool_min}
-maxconn = {pool_max}
-dsn = {database_url}
-
-[redis.Redis cache]
-url = {redis_url}
-
-[MyService service]
-db = {pool}
-cache = {cache}
-debug = true
+[myapp.Database db]
+url = {database_url}
+pool_size = {pool_size}
 ```
 
-### Loading INI
+**Loading:**
 
 ```python
-import configparser
 from apywire import Wiring
+from apywire.formats import ini_to_spec
 
-# Load INI file
-config = configparser.ConfigParser()
-config.read("config.ini")
-
-# Convert to apywire spec
-spec = {}
-for section in config.sections():
-    if section == "constants":
-        # Constants go in top level
-        for key, value in config[section].items():
-            # Type conversion (INI reads everything as strings)
-            if value.isdigit():
-                spec[key] = int(value)
-            elif value.lower() in ("true", "false"):
-                spec[key] = value.lower() == "true"
-            else:
-                spec[key] = value
-    else:
-        # Wired objects
-        spec[section] = dict(config[section])
+with open("config.ini") as f:
+    spec = ini_to_spec(f.read())
 
 wired = Wiring(spec)
 ```
 
-### INI Benefits
+**Benefits:**
 
 - ✅ Built into Python standard library
 - ✅ Simple syntax
-- ✅ Widely understood
 - ✅ Supports comments
-- ❌ All values are strings (need type conversion)
-- ❌ Limited nesting
+- ❌ All values are strings (automatic type conversion provided)
 
-## Placeholder Expansion
+### YAML
 
-Constants can now reference other constants and wired objects using placeholder syntax `{name}`.
-
-### Constant → Constant (Immediate Expansion)
-
-When a constant references only other constants, it's expanded immediately at initialization:
-
-```yaml
-# config.yaml
-host: localhost
-port: 5432
-database_name: myapp
-
-# This is expanded immediately
-database_url: "postgresql://{host}:{port}/{database_name}"
-```
+YAML is not directly supported by the formats module, but you can use PyYAML:
 
 ```python
 import yaml
@@ -272,88 +156,60 @@ with open("config.yaml") as f:
     spec = yaml.safe_load(f)
 
 wired = Wiring(spec)
-
-# The database_url constant is already expanded to the full connection string
 ```
 
-**Nested references work too:**
+## Format Conversion
 
-```yaml
-base_url: http://api.example.com
-v1_url: "{base_url}/v1"
-users_endpoint: "{v1_url}/users"  # Becomes "http://api.example.com/v1/users"
+The formats module provides functions to convert between formats:
+
+```python
+from apywire.formats import (
+    json_to_spec, spec_to_json,
+    toml_to_spec, spec_to_toml,
+    ini_to_spec, spec_to_ini,
+)
+
+# Load from one format
+with open("config.json") as f:
+    spec = json_to_spec(f.read())
+
+# Save to another format
+toml_output = spec_to_toml(spec)
+with open("config.toml", "w") as f:
+    f.write(toml_output)
 ```
 
-### Constant → Wired Object (Auto-Promoted)
+## Placeholder Expansion
 
-When a constant references a wired object, it's automatically promoted to an accessor with lazy evaluation:
+Constants can reference other constants and wired objects using `{name}` syntax.
 
-```yaml
-database_url: "postgresql://localhost/mydb"
+### Constant → Constant
 
-psycopg2.connect conn:
-  dsn: "{database_url}"
+When a constant references only other constants, it's expanded immediately:
 
-# This references a wired object, so it becomes an accessor
-status: "Connected to {conn}"
+```toml
+host = "localhost"
+port = 5432
+database_url = "postgresql://{host}:{port}/mydb"
+```
+
+### Constant → Wired Object
+
+When a constant references a wired object, it becomes a lazy accessor:
+
+```toml
+["datetime.datetime server_start"]
+year = 2025
+month = 1
+day = 1
+
+# This is auto-promoted to an accessor
+status = "Server started at {server_start}"
 ```
 
 ```python
 wired = Wiring(spec)
-
-# status is now an accessor (not in _values)
-# It lazily instantiates conn and converts it to string
-status_msg = wired.status()  # "Connected to <connection object>"
-```
-
-### Mixed References
-
-Constants with both constant and wired object references are auto-promoted:
-
-```yaml
-host: localhost
-
-datetime.datetime server_start:
-  year: 2025
-  month: 1
-  day: 1
-
-# This has both constant and wired refs, so it's auto-promoted
-status: "Server {host} started at {server_start}"
-```
-
-```python
-wired = Wiring(spec)
-
-# Use constants via placeholders in other wired objects
-msg = wired.status()  # "Server localhost started at 2025-01-01 00:00:00"
-```
-
-### Benefits
-
-- ✅ **DRY Configuration**: Define values once, reference everywhere
-- ✅ **Computed Constants**: Build strings from multiple parts
-- ✅ **Flexible**: Mix constants and wired objects
-- ✅ **Lazy Evaluation**: Wired objects only instantiated when needed
-- ✅ **Type Conversion**: Non-string constants automatically converted to strings
-
-### Circular Dependencies
-
-Circular references in constants are detected at initialization:
-
-```yaml
-a: "{b}"
-b: "{a}"  # ❌ CircularWiringError
-```
-
-Circular references with wired objects follow normal lazy detection:
-
-```yaml
-MyClass obj_a:
-  dep: "{obj_b}"
-
-MyClass obj_b:
-  dep: "{obj_a}"  # ❌ CircularWiringError when accessed
+msg = wired.status()  # "Server started at 2025-01-01 00:00:00"
 ```
 
 ## Environment-Based Configuration
@@ -362,247 +218,118 @@ Load different configs based on environment:
 
 ```python
 import os
-import yaml
 from apywire import Wiring
+from apywire.formats import toml_to_spec
 
-# Determine environment
 env = os.getenv("APP_ENV", "dev")
+config_file = f"config.{env}.toml"
 
-# Load appropriate config file
-config_file = f"config.{env}.yaml"
-with open(config_file, "r") as f:
-    spec = yaml.safe_load(f)
+with open(config_file) as f:
+    spec = toml_to_spec(f.read())
 
 wired = Wiring(spec, thread_safe=(env == "production"))
 ```
 
-File structure:
-```
-config.dev.yaml
-config.staging.yaml
-config.production.yaml
-```
+## Environment Variables
 
-## Environment Variables in Configs
-
-Mix configuration files with environment variables:
-
-### YAML with Environment Variables
-
-```yaml
-# config.yaml
-database_url: ${DATABASE_URL}
-api_key: ${API_KEY}
-
-MyService service:
-  db_url: "{database_url}"
-  api_key: "{api_key}"
-```
-
-### Loading with Substitution
+You can substitute environment variables before parsing:
 
 ```python
 import os
-import yaml
 import re
 from apywire import Wiring
+from apywire.formats import toml_to_spec
 
-def substitute_env_vars(config):
-    """Recursively substitute ${VAR} with environment variables."""
-    if isinstance(config, dict):
-        return {k: substitute_env_vars(v) for k, v in config.items()}
-    elif isinstance(config, list):
-        return [substitute_env_vars(item) for item in config]
-    elif isinstance(config, str):
-        # Replace ${VAR} with environment variable
-        pattern = r'\$\{([^}]+)\}'
-        return re.sub(pattern, lambda m: os.getenv(m.group(1), ''), config)
-    return config
+def substitute_env(content: str) -> str:
+    """Replace ${VAR} with environment variable values."""
+    return re.sub(
+        r'\$\{([^}]+)\}',
+        lambda m: os.getenv(m.group(1), ''),
+        content
+    )
 
-# Load and substitute
-with open("config.yaml", "r") as f:
-    raw_spec = yaml.safe_load(f)
+with open("config.toml") as f:
+    content = substitute_env(f.read())
+    spec = toml_to_spec(content)
 
-spec = substitute_env_vars(raw_spec)
-wired = Wiring(spec)
-```
-
-## Schema Validation
-
-Validate your configuration files before loading:
-
-### YAML with Schema (using pydantic)
-
-```python
-from pydantic import BaseModel, Field
-import yaml
-from apywire import Wiring
-
-class DatabaseConfig(BaseModel):
-    database_url: str
-    pool_min: int = Field(ge=1)
-    pool_max: int = Field(ge=1, le=100)
-
-class AppConfig(BaseModel):
-    database: DatabaseConfig
-    redis_url: str
-    debug: bool = False
-
-# Load and validate
-with open("config.yaml", "r") as f:
-    raw_config = yaml.safe_load(f)
-
-# Validate structure
-validated = AppConfig(**raw_config)
-
-# Build apywire spec from validated config
-spec = {
-    "database_url": validated.database.database_url,
-    "pool_min": validated.database.pool_min,
-    "pool_max": validated.database.pool_max,
-    # ... rest of spec
-}
-
-wired = Wiring(spec)
-```
-
-## Best Practices
-
-### 1. Keep Secrets Out of Config Files
-
-```python
-# ❌ Bad: Secrets in config file
-database_url: postgresql://user:password@localhost/db
-
-# ✅ Good: Reference environment variables
-database_url: ${DATABASE_URL}
-```
-
-### 2. Use Separate Configs Per Environment
-
-```
-config/
-├── base.yaml          # Shared configuration
-├── dev.yaml           # Development overrides
-├── staging.yaml       # Staging overrides
-└── production.yaml    # Production overrides
-```
-
-### 3. Document Your Config Format
-
-Add a `config.example.yaml` to your repository:
-
-```yaml
-# config.example.yaml
-# Copy this to config.yaml and customize
-
-database_url: postgresql://localhost/mydb  # Database connection string
-pool_min: 1                                 # Minimum pool connections
-pool_max: 20                                # Maximum pool connections
-```
-
-### 4. Validate Before Loading
-
-Always validate configuration before passing to Wiring:
-
-```python
-def load_config(filename):
-    """Load and validate configuration."""
-    with open(filename) as f:
-        spec = yaml.safe_load(f)
-
-    # Validate required keys
-    required = ["database_url", "redis_url"]
-    for key in required:
-        if key not in spec:
-            raise ValueError(f"Missing required config: {key}")
-
-    return spec
-
-spec = load_config("config.yaml")
 wired = Wiring(spec)
 ```
 
 ## Complete Example
-
-Putting it all together with best practices:
 
 ### Project Structure
 
 ```
 myapp/
 ├── config/
-│   ├── base.yaml
-│   ├── dev.yaml
-│   ├── production.yaml
-│   └── config.example.yaml
+│   ├── dev.toml
+│   ├── production.toml
+│   └── config.example.toml
 ├── app/
 │   ├── __init__.py
 │   ├── config.py
 │   └── main.py
-└── .env.example
+└── wiring.py  # Generated via CLI
+```
+
+### `config/dev.toml`
+
+```toml
+debug = true
+database_url = "postgresql://localhost/myapp_dev"
+pool_size = 5
+
+["myapp.Database db"]
+url = "{database_url}"
+pool_size = "{pool_size}"
+
+["myapp.Cache cache"]
+backend = "memory"
 ```
 
 ### `app/config.py`
 
 ```python
 import os
-import yaml
 from pathlib import Path
 from apywire import Wiring
+from apywire.formats import toml_to_spec
 
-def load_spec(env: str = None) -> dict:
-    """Load wiring spec from YAML configuration."""
-    if env is None:
-        env = os.getenv("APP_ENV", "dev")
-
+def load_wiring() -> Wiring:
+    env = os.getenv("APP_ENV", "dev")
     config_dir = Path(__file__).parent.parent / "config"
+    config_file = config_dir / f"{env}.toml"
 
-    # Load base config
-    with open(config_dir / "base.yaml") as f:
-        spec = yaml.safe_load(f)
+    with open(config_file) as f:
+        spec = toml_to_spec(f.read())
 
-    # Load environment-specific overrides
-    env_file = config_dir / f"{env}.yaml"
-    if env_file.exists():
-        with open(env_file) as f:
-            env_spec = yaml.safe_load(f)
-            spec.update(env_spec)
-
-    # Substitute environment variables
-    spec = substitute_env_vars(spec)
-
-    return spec
-
-def get_wired(env: str = None) -> Wiring:
-    """Get configured Wiring instance."""
-    spec = load_spec(env)
-    thread_safe = env == "production"
-    return Wiring(spec, thread_safe=thread_safe)
+    return Wiring(spec, thread_safe=(env == "production"))
 ```
 
 ### `app/main.py`
 
 ```python
-from app.config import get_wired
+from app.config import load_wiring
 
 def main():
-    wired = get_wired()
-
-    # Access configured services
-    db = wired.database()
+    wired = load_wiring()
+    db = wired.db()
     cache = wired.cache()
-    service = wired.service()
-
-    # Run application
-    service.run()
+    # Use services...
 
 if __name__ == "__main__":
     main()
 ```
 
+## Best Practices
+
+1. **Keep Secrets Out**: Use environment variables for passwords and API keys
+2. **Separate Configs**: Use different files for dev/staging/production
+3. **Document Your Config**: Include a `config.example.toml` in version control
+4. **Validate Early**: Check required keys before creating Wiring instance
+
 ## Next Steps
 
+- **[Command Line Interface](cli.md)** - Generate and compile specs
 - **[Basic Usage](basic-usage.md)** - Learn the fundamentals
-- **[Advanced Features](advanced.md)** - Complex patterns
-- **[Examples](../examples.md)** - Real-world use cases
+- **[Compilation](compilation.md)** - Understanding compiled output

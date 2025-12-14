@@ -5,6 +5,11 @@
 # Project Specific
 apywire/**.c
 site/
+/examples/cli/app_config.toml
+/examples/cli/app_wiring.py
+/examples/cli/config.json
+/examples/cli/config.toml
+/examples/cli/config.ini
 
 # General
 .venv/
