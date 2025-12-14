@@ -40,6 +40,7 @@ nav:
       - user-guide/index.md
       - Basic Usage: user-guide/basic-usage.md
       - Configuration Files: user-guide/configuration-files.md
+      - Command Line Interface: user-guide/cli.md
       - Async Support: user-guide/async-support.md
       - Thread Safety: user-guide/thread-safety.md
       - Compilation: user-guide/compilation.md

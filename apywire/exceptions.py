@@ -42,3 +42,15 @@ class LockUnavailableError(RuntimeError):
     This exception is used internally by the thread-safety system but is also
     referenced in compiled code, so it is part of the public API.
     """
+
+
+class FormatError(ValueError):
+    """Raised when parsing or serializing a spec in a specific format fails.
+
+    This wraps the underlying parsing exception to provide context about
+    the format being used and a user-friendly error message.
+    """
+
+    def __init__(self, fmt: str, message: str) -> None:
+        self.format = fmt
+        super().__init__(f"{fmt.upper()} format error: {message}")
