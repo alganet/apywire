@@ -1,0 +1,14 @@
+# Ignore development artifacts that shouldn't be on the website branch
+apywire/
+apywire.egg-info/
+*.egg-info/
+.mypy_cache/
+scripts/
+site/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+dist/
