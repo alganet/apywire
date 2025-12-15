@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import re
+from functools import cached_property
 from operator import itemgetter
 from typing import Awaitable, Callable, Protocol, cast, final
 
@@ -108,7 +109,7 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
             f"'{type(self).__name__}' object has no attribute '{name}'"
         )
 
-    @property
+    @cached_property
     def aio(self) -> "AioAccessor":
         """Return a wrapper object providing async accessors.
 
@@ -116,9 +117,7 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         asynchronously. We use `aio` to avoid the reserved keyword
         `async` (so `wired.async` would be invalid syntax).
         """
-        if not hasattr(self, "_aio_accessor"):
-            self._aio_accessor = AioAccessor(self)
-        return self._aio_accessor
+        return AioAccessor(self)
 
     def _instantiate_attr(
         self,

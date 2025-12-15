@@ -195,15 +195,13 @@ def test_instantiate_attr_exception_handling() -> None:
 
 
 def test_wiring_aio_lazy_init() -> None:
-    """Test lazy initialization of aio property."""
+    """Test initialization of aio accessor with @cached_property."""
     from apywire import Wiring
 
     wired = Wiring({}, thread_safe=False)
-    # Access internal attribute to verify it's not there yet
-    assert not hasattr(wired, "_aio_accessor")
-    # Access property
+    # Access property (cached_property handles caching automatically)
     aio = wired.aio
-    assert hasattr(wired, "_aio_accessor")
+    # Verify same object is returned (caching works)
     assert wired.aio is aio
 
 
