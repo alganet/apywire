@@ -4,7 +4,7 @@
 
 site_name: apywire
 site_description: A Python package for lazy object wiring and dependency injection
-site_url: https://github.com/alganet/apywire
+site_url: https://alganet.github.io/apywire/
 repo_url: https://github.com/alganet/apywire
 repo_name: alganet/apywire
 
@@ -32,6 +32,10 @@ theme:
     - search.suggest
     - search.highlight
     - content.code.copy
+
+extra:
+  version:
+    provider: mike
 
 nav:
   - Home: index.md

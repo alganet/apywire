@@ -42,6 +42,7 @@ dev = [
     "flake8-pyproject",
     "flake8",
     "isort",
+    "mike",
     "mkdocs-autorefs",
     "mkdocs-material",
     "mkdocs",
