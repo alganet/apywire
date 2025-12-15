@@ -289,7 +289,7 @@ class WiringBase:
         Returns:
             The placeholder name without braces
         """
-        return s[len(PLACEHOLDER_START) : -len(PLACEHOLDER_END)]
+        return s.removeprefix(PLACEHOLDER_START).removesuffix(PLACEHOLDER_END)
 
     def _resolve(self, obj: _SpecValue) -> _ResolvedValue:
         """Resolve placeholders into `_WiredRef` markers for runtime.
