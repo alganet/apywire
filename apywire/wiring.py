@@ -23,7 +23,7 @@ from typing import NamedTuple, TypeAlias, cast
 
 from apywire.constants import (
     PLACEHOLDER_END,
-    PLACEHOLDER_PATTERN,
+    PLACEHOLDER_REGEX,
     PLACEHOLDER_START,
     SPEC_KEY_DELIMITER,
     SYNTHETIC_CONST,
@@ -131,7 +131,6 @@ class WiringBase:
         self._thread_safe = thread_safe
         self._max_lock_attempts = max_lock_attempts
         self._lock_retry_sleep = lock_retry_sleep
-        self._placeholder_pattern = re.compile(PLACEHOLDER_PATTERN)
 
         parsed: list[_UnresolvedParsedEntry] = []
         consts: dict[str, _SpecMapping | _ConstantValue] = {}
@@ -342,7 +341,7 @@ class WiringBase:
                 str(ref_value) if not isinstance(ref_value, str) else ref_value
             )
 
-        return re.sub(self._placeholder_pattern, replace_placeholder, template)
+        return PLACEHOLDER_REGEX.sub(replace_placeholder, template)
 
     def _find_placeholder_names(self, obj: _SpecValue) -> set[str]:
         """Find all placeholder names referenced in a value.
@@ -356,7 +355,7 @@ class WiringBase:
         names: set[str] = set()
         if isinstance(obj, str):
             # Find all placeholders in the string (embedded or not)
-            matches: list[str] = re.findall(self._placeholder_pattern, obj)
+            matches: list[str] = PLACEHOLDER_REGEX.findall(obj)
             names.update(matches)
         elif isinstance(obj, dict):
             for v in obj.values():

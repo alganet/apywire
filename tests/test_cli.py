@@ -12,39 +12,15 @@ import pytest
 from apywire.__main__ import main
 
 
-def test_cli_version_short_flag() -> None:
-    """Test CLI version display with -v flag."""
+@pytest.mark.parametrize(
+    "flag",
+    ["-v", "--version", "-h", "--help"],
+    ids=["v", "version", "h", "help"],
+)
+def test_cli_basic_flags_exit_zero(flag: str) -> None:
+    """Test that basic CLI flags exit with code 0."""
     with pytest.raises(SystemExit) as exc_info:
-        main(["-v"])
-
-    # argparse with action="version" exits with code 0
-    assert exc_info.value.code == 0
-
-
-def test_cli_version_long_flag() -> None:
-    """Test CLI version display with --version flag."""
-    with pytest.raises(SystemExit) as exc_info:
-        main(["--version"])
-
-    # argparse with action="version" exits with code 0
-    assert exc_info.value.code == 0
-
-
-def test_cli_help_flag() -> None:
-    """Test CLI help display with -h flag."""
-    with pytest.raises(SystemExit) as exc_info:
-        main(["-h"])
-
-    # argparse with action="help" exits with code 0
-    assert exc_info.value.code == 0
-
-
-def test_cli_help_long_flag() -> None:
-    """Test CLI help display with --help flag."""
-    with pytest.raises(SystemExit) as exc_info:
-        main(["--help"])
-
-    # argparse with action="help" exits with code 0
+        main([flag])
     assert exc_info.value.code == 0
 
 
@@ -54,33 +30,15 @@ def test_cli_no_arguments() -> None:
     assert result == 0
 
 
-def test_cli_version_output_contains_package_name() -> None:
-    """Test that version output contains 'apywire'."""
+@pytest.mark.parametrize("flag", ["-v", "--version"], ids=["v", "version"])
+def test_cli_version_output_format(flag: str) -> None:
+    """Test that version output contains package name and version."""
     from importlib.metadata import version
 
     expected_version = version("apywire")
-
-    # Capture stdout since argparse writes version to stdout
     with pytest.raises(SystemExit) as exc_info:
         with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            main(["--version"])
-
-    assert exc_info.value.code == 0
-    stdout_output = mock_stdout.getvalue()
-    assert "apywire" in stdout_output
-    assert expected_version in stdout_output
-
-
-def test_cli_version_short_output_contains_package_name() -> None:
-    """Test that -v output contains 'apywire'."""
-    from importlib.metadata import version
-
-    expected_version = version("apywire")
-
-    # Capture stdout since argparse writes version to stdout
-    with pytest.raises(SystemExit) as exc_info:
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            main(["-v"])
+            main([flag])
 
     assert exc_info.value.code == 0
     stdout_output = mock_stdout.getvalue()
@@ -170,40 +128,25 @@ def test_cli_module_execution() -> None:
     assert "apywire" in result.stdout  # argparse outputs to stdout
 
 
-def test_cli_generate_json() -> None:
-    """Test generate command with JSON format."""
+@pytest.mark.parametrize(
+    "fmt, expected_marker",
+    [
+        ("json", "collections.OrderedDict d"),
+        ("ini", "[collections.OrderedDict d]"),
+        ("toml", '["collections.OrderedDict d"]'),
+    ],
+    ids=["json", "ini", "toml"],
+)
+def test_cli_generate_formats(fmt: str, expected_marker: str) -> None:
+    """Test generate command with different output formats."""
     with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
         result = main(
-            ["generate", "--format", "json", "collections.OrderedDict d"]
+            ["generate", "--format", fmt, "collections.OrderedDict d"]
         )
 
     assert result == 0
     output = mock_stdout.getvalue()
-    assert "collections.OrderedDict d" in output
-
-
-def test_cli_generate_ini() -> None:
-    """Test generate command with INI format."""
-    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-        result = main(
-            ["generate", "--format", "ini", "collections.OrderedDict d"]
-        )
-
-    assert result == 0
-    output = mock_stdout.getvalue()
-    assert "[collections.OrderedDict d]" in output
-
-
-def test_cli_generate_toml() -> None:
-    """Test generate command with TOML format."""
-    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-        result = main(
-            ["generate", "--format", "toml", "collections.OrderedDict d"]
-        )
-
-    assert result == 0
-    output = mock_stdout.getvalue()
-    assert '["collections.OrderedDict d"]' in output
+    assert expected_marker in output
 
 
 def test_cli_generate_multiple_entries() -> None:
@@ -225,41 +168,25 @@ def test_cli_generate_multiple_entries() -> None:
     assert "collections.OrderedDict b" in output
 
 
-def test_cli_compile_json_stdin() -> None:
-    """Test compile command with JSON from stdin."""
-    json_input = '{"collections.OrderedDict d": {}}'
-    with patch("sys.stdin", StringIO(json_input)):
+@pytest.mark.parametrize(
+    "fmt, input_data",
+    [
+        ("json", '{"collections.OrderedDict d": {}}'),
+        ("ini", "[collections.OrderedDict d]\n"),
+        ("toml", '["collections.OrderedDict d"]\n'),
+    ],
+    ids=["json", "ini", "toml"],
+)
+def test_cli_compile_stdin_formats(fmt: str, input_data: str) -> None:
+    """Test compile command with different input formats from stdin."""
+    with patch("sys.stdin", StringIO(input_data)):
         with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            result = main(["compile", "--format", "json", "-"])
+            result = main(["compile", "--format", fmt, "-"])
 
     assert result == 0
     output = mock_stdout.getvalue()
     assert "class Compiled:" in output
     assert "def d(self):" in output
-
-
-def test_cli_compile_ini_stdin() -> None:
-    """Test compile command with INI from stdin."""
-    ini_input = "[collections.OrderedDict d]\n"
-    with patch("sys.stdin", StringIO(ini_input)):
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            result = main(["compile", "--format", "ini", "-"])
-
-    assert result == 0
-    output = mock_stdout.getvalue()
-    assert "class Compiled:" in output
-
-
-def test_cli_compile_toml_stdin() -> None:
-    """Test compile command with TOML from stdin."""
-    toml_input = '["collections.OrderedDict d"]\n'
-    with patch("sys.stdin", StringIO(toml_input)):
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            result = main(["compile", "--format", "toml", "-"])
-
-    assert result == 0
-    output = mock_stdout.getvalue()
-    assert "class Compiled:" in output
 
 
 def test_cli_compile_with_aio_flag() -> None:
@@ -310,43 +237,26 @@ def test_cli_compile_from_file() -> None:
         os.unlink(temp_file)
 
 
-def test_cli_compile_json_parsing_error() -> None:
-    """Test CLI error handling for invalid JSON input."""
-    json_input = '{"invalid": json content}'
-
-    with patch("sys.stdin", StringIO(json_input)):
+@pytest.mark.parametrize(
+    "fmt, input_data, expected_err",
+    [
+        ("json", '{"invalid": json content}', "Error parsing JSON content:"),
+        ("toml", '["invalid toml content', "Error parsing TOML content:"),
+        ("ini", "[invalid section\nkey = value", "Error parsing INI content:"),
+    ],
+    ids=["json", "toml", "ini"],
+)
+def test_cli_compile_parsing_errors(
+    fmt: str, input_data: str, expected_err: str
+) -> None:
+    """Test CLI error handling for invalid input formats."""
+    with patch("sys.stdin", StringIO(input_data)):
         with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
-            result = main(["compile", "--format", "json", "-"])
+            result = main(["compile", "--format", fmt, "-"])
 
-    assert result == 1  # Should return error code
+    assert result == 1
     stderr_output = mock_stderr.getvalue()
-    assert "Error parsing JSON content:" in stderr_output
-
-
-def test_cli_compile_toml_parsing_error() -> None:
-    """Test CLI error handling for invalid TOML input."""
-    toml_input = '["invalid toml content'
-
-    with patch("sys.stdin", StringIO(toml_input)):
-        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
-            result = main(["compile", "--format", "toml", "-"])
-
-    assert result == 1  # Should return error code
-    stderr_output = mock_stderr.getvalue()
-    assert "Error parsing TOML content:" in stderr_output
-
-
-def test_cli_compile_ini_parsing_error() -> None:
-    """Test CLI error handling for invalid INI input."""
-    ini_input = "[invalid section\nkey = value"
-
-    with patch("sys.stdin", StringIO(ini_input)):
-        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
-            result = main(["compile", "--format", "ini", "-"])
-
-    assert result == 1  # Should return error code
-    stderr_output = mock_stderr.getvalue()
-    assert "Error parsing INI content:" in stderr_output
+    assert expected_err in stderr_output
 
 
 def test_cli_generate_toml_write_error() -> None:
