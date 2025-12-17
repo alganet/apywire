@@ -14,7 +14,7 @@ from functools import cached_property
 from operator import itemgetter
 from typing import Awaitable, Callable, Protocol, cast, final
 
-from apywire.constants import SYNTHETIC_CONST
+from apywire.constants import PLACEHOLDER_REGEX, SYNTHETIC_CONST
 from apywire.exceptions import (
     CircularWiringError,
     UnknownPlaceholderError,
@@ -328,7 +328,7 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
             # Convert to string
             return str(value)
 
-        return re.sub(self._placeholder_pattern, replace_placeholder, template)
+        return PLACEHOLDER_REGEX.sub(replace_placeholder, template)
 
 
 @final

@@ -8,6 +8,8 @@ This module centralizes magic strings and values used throughout the codebase
 to improve maintainability and reduce duplication.
 """
 
+import re
+
 SPEC_KEY_DELIMITER = " "  # Separates module.Class from name in spec keys
 
 PLACEHOLDER_START = "{"  # Start marker for placeholder references
@@ -15,6 +17,8 @@ PLACEHOLDER_END = "}"  # End marker for placeholder references
 
 # Regex pattern for placeholders like {name}: captures name, no nested braces
 PLACEHOLDER_PATTERN = r"\{([^{}]+)\}"
+# Compiled version for better performance
+PLACEHOLDER_REGEX = re.compile(PLACEHOLDER_PATTERN)
 
 SYNTHETIC_CONST = "__sconst__"  # Synthetic module for promoted constants
 

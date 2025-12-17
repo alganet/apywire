@@ -4,77 +4,54 @@
 
 import datetime
 import pathlib
-from typing import cast
+from typing import Callable, cast
+
+import pytest
 
 import apywire
 
 
-def test_stdlib_int_list_args() -> None:
-    """Test instantiating int with positional arguments from a list."""
-    spec: apywire.Spec = {"builtins.int myInt": [10]}
-    wired = apywire.Wiring(spec)
-    assert wired.myInt() == 10
-
-
-def test_stdlib_int_dict_numeric_args() -> None:
-    """Test instantiating int with positional arguments from numeric keys."""
-    spec: apywire.Spec = {"builtins.int myInt": {0: 42}}
-    wired = apywire.Wiring(spec)
-    assert wired.myInt() == 42
-
-
-def test_stdlib_complex_mixed_args() -> None:
-    """Test instantiating complex with mixed positional and keyword
-    arguments.
+@pytest.mark.parametrize(
+    "class_path, args, expected",
+    [
+        ("builtins.int", [10], 10),
+        ("builtins.int", {0: 42}, 42),
+        ("builtins.complex", {0: 1.5, "imag": 2.5}, complex(1.5, 2.5)),
+        ("pathlib.Path", ["/tmp", "foo"], pathlib.Path("/tmp/foo")),
+        ("datetime.date", [2023, 10, 27], datetime.date(2023, 10, 27)),
+    ],
+    ids=["int_list", "int_dict", "complex_mixed", "path", "date"],
+)
+def test_stdlib_instantiation(
+    class_path: str, args: object, expected: object
+) -> None:
+    """Test instantiating various stdlib classes with different argument
+    formats.
     """
-    # complex(real, imag)
-    # real as positional (0), imag as keyword
-    spec: apywire.Spec = {"builtins.complex myComplex": {0: 1.5, "imag": 2.5}}
-    wired = apywire.Wiring(spec)
-    c = cast(complex, wired.myComplex())
-    assert c.real == 1.5
-    assert c.imag == 2.5
+    spec = {f"{class_path} obj": args}
+    wired = apywire.Wiring(spec)  # type: ignore[arg-type]
+    assert wired.obj() == expected
 
 
-def test_stdlib_path_args() -> None:
-    """Test instantiating pathlib.Path with positional arguments."""
-    spec: apywire.Spec = {"pathlib.Path myPath": ["/tmp", "foo"]}
-    wired = apywire.Wiring(spec)
-    p = wired.myPath()
-    assert isinstance(p, pathlib.Path)
-    assert str(p) == "/tmp/foo"
-
-
-def test_stdlib_date_args() -> None:
-    """Test instantiating datetime.date with positional arguments."""
-    spec: apywire.Spec = {"datetime.date myDate": [2023, 10, 27]}
-    wired = apywire.Wiring(spec)
-    d = wired.myDate()
-    assert d == datetime.date(2023, 10, 27)
-
-
-def test_compile_list_args() -> None:
-    """Test compilation of list arguments."""
-    spec: apywire.Spec = {"builtins.int myInt": [99]}
-    code = apywire.WiringCompiler(spec).compile()
+@pytest.mark.parametrize(
+    "class_path, args, expected",
+    [
+        ("builtins.int", [99], 99),
+        ("builtins.complex", {0: 1.0, "imag": 2.0}, complex(1.0, 2.0)),
+    ],
+    ids=["int", "complex"],
+)
+def test_compile_stdlib_instantiation(
+    class_path: str, args: object, expected: object
+) -> None:
+    """Test compilation of various stdlib classes with different argument
+    formats.
+    """
+    spec = {f"{class_path} obj": args}
+    code = apywire.WiringCompiler(spec).compile()  # type: ignore[arg-type]
 
     execd: dict[str, object] = {}
     exec(code, execd)
     compiled = execd["compiled"]
 
-    # We can't easily type check the dynamic compiled object without a
-    # Protocol, but we can check the attribute.
-    assert cast(int, getattr(compiled, "myInt")()) == 99
-
-
-def test_compile_mixed_args() -> None:
-    """Test compilation of mixed numeric/string keys."""
-    spec: apywire.Spec = {"builtins.complex myComplex": {0: 1.0, "imag": 2.0}}
-    code = apywire.WiringCompiler(spec).compile()
-
-    execd: dict[str, object] = {}
-    exec(code, execd)
-    compiled = execd["compiled"]
-
-    c = cast(complex, getattr(compiled, "myComplex")())
-    assert c == complex(1.0, 2.0)
+    assert cast(Callable[[], object], getattr(compiled, "obj"))() == expected

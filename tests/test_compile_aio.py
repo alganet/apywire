@@ -250,11 +250,21 @@ def test_aio_accessor_constant_not_run_in_executor(
     assert result == 42
 
 
-def test_compile_aio_list_args() -> None:
-    """Test async compilation of list arguments."""
-    spec: apywire.Spec = {"builtins.int myInt": [99]}
-    # Compile with aio=True
-    code = apywire.WiringCompiler(spec).compile(aio=True)
+@pytest.mark.parametrize(
+    "class_path, args, expected",
+    [
+        ("builtins.int", [99], 99),
+        ("builtins.complex", {0: 1.0, "imag": 2.0}, complex(1.0, 2.0)),
+    ],
+    ids=["int", "complex"],
+)
+def test_compile_aio_instantiation(
+    class_path: str, args: object, expected: object
+) -> None:
+    """Test async compilation of various stdlib classes."""
+    spec = {f"{class_path} obj": args}
+    compiler = apywire.WiringCompiler(spec)  # type: ignore[arg-type]
+    code = compiler.compile(aio=True)
 
     execd: dict[str, object] = {"asyncio": asyncio}
     exec(code, execd)
@@ -262,26 +272,9 @@ def test_compile_aio_list_args() -> None:
 
     async def run() -> None:
         # When compiled with aio=True, the methods themselves are async
-        coro = cast(Awaitable[int], getattr(compiled, "myInt")())
+        coro = cast(Awaitable[object], getattr(compiled, "obj")())
         val = await coro
-        assert val == 99
-
-    asyncio.run(run())
-
-
-def test_compile_aio_mixed_args() -> None:
-    """Test async compilation of mixed numeric/string keys."""
-    spec: apywire.Spec = {"builtins.complex myComplex": {0: 1.0, "imag": 2.0}}
-    code = apywire.WiringCompiler(spec).compile(aio=True)
-
-    execd: dict[str, object] = {"asyncio": asyncio}
-    exec(code, execd)
-    compiled = execd["compiled"]
-
-    async def run() -> None:
-        coro = cast(Awaitable[complex], getattr(compiled, "myComplex")())
-        val = await coro
-        assert val == complex(1.0, 2.0)
+        assert val == expected
 
     asyncio.run(run())
 

@@ -85,51 +85,18 @@ class WiringCompiler(WiringBase):
             return ast.Tuple(elts=elts, ctx=ast.Load())
         return ast.Constant(cast(_ConstantValue, obj))
 
-    def _compile_property(
-        self,
-        name: str,
-        module_name: str,
-        class_name: str,
-        factory_method: str | None,
-        data: _ResolvedSpecMapping,
-        *,
-        aio: bool = False,
-        thread_safe: bool = False,
-    ) -> ast.FunctionDef | ast.AsyncFunctionDef:
-        """Build an AST FunctionDef for a cached accessor that returns
-        ``module.class(**data)`` or ``module.class.factory_method(**data)``.
+    def _normalize_spec_data(
+        self, data: _ResolvedSpecMapping
+    ) -> tuple[list[_ResolvedValue], dict[str, _ResolvedValue]]:
+        """Normalize spec data into positional and keyword arguments.
 
-        When ``aio`` is True this function will produce an
-        ``ast.AsyncFunctionDef`` that awaits referenced accessors and calls
-        the blocking constructor in an executor (``loop.run_in_executor``).
-        When ``aio`` is False it produces a standard synchronous
-        ``ast.FunctionDef``.
+        Args:
+            data: Either a list (positional args only) or dict
+                  (mixed args/kwargs)
+
+        Returns:
+            Tuple of (args_list, kwargs_dict)
         """
-        # Build the target callable: module.Class or module.Class.factoryMethod
-        if factory_method:
-            module_attr = ast.Attribute(
-                value=ast.Attribute(
-                    value=ast.Name(id=module_name, ctx=ast.Load()),
-                    attr=class_name,
-                    ctx=ast.Load(),
-                ),
-                attr=factory_method,
-                ctx=ast.Load(),
-            )
-        else:
-            module_attr = ast.Attribute(
-                value=ast.Name(id=module_name, ctx=ast.Load()),
-                attr=class_name,
-                ctx=ast.Load(),
-            )
-        pre_statements: list[ast.stmt] = []
-
-        counter = [0]  # For generating unique variable names
-
-        args: list[ast.expr] = []
-
-        kwargs: list[ast.keyword] = []
-        # Normalize data into args_data (list) and kwargs_data (dict)
         args_data: list[_ResolvedValue] = []
         kwargs_data: dict[str, _ResolvedValue] = {}
 
@@ -137,16 +104,45 @@ class WiringCompiler(WiringBase):
             args_data = data
         else:
             data_dict = data
-            # Iterate once over data.items() to separate args and kwargs
+            # Separate args and kwargs from mixed dict
             args_items = []
-            kwargs_data = {}
             for k, v in data_dict.items():
                 if isinstance(k, int):
                     args_items.append((k, v))
                 elif isinstance(k, str):
                     kwargs_data[k] = v
+            # Sort positional args by their integer keys
             args_items.sort(key=itemgetter(0))
             args_data = [v for _, v in args_items]
+
+        return args_data, kwargs_data
+
+    def _process_argument_values(
+        self,
+        args_data: list[_ResolvedValue],
+        kwargs_data: dict[str, _ResolvedValue],
+        *,
+        aio: bool,
+        pre_statements: list[ast.stmt],
+        counter: list[int],
+    ) -> tuple[list[ast.expr], list[ast.keyword]]:
+        """Process argument values and return AST expressions.
+
+        For async mode, replaces awaits with local variables and generates
+        pre-statements for variable assignments.
+
+        Args:
+            args_data: List of positional argument values
+            kwargs_data: Dict of keyword argument values
+            aio: Whether running in async mode
+            pre_statements: List to accumulate assignment statements
+            counter: Mutable counter for unique variable names
+
+        Returns:
+            Tuple of (args_list, kwargs_list) with AST expressions
+        """
+        args: list[ast.expr] = []
+        kwargs: list[ast.keyword] = []
 
         # Process positional args
         for i, value in enumerate(args_data):
@@ -189,12 +185,47 @@ class WiringCompiler(WiringBase):
                 kw_val = raw_val_ast
             kwargs.append(ast.keyword(arg=key, value=kw_val))
 
-        call = ast.Call(func=module_attr, args=args, keywords=kwargs)
+        return args, kwargs
 
-        cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
+    def _create_loop_assignment(self) -> ast.stmt:
+        """Create AST statement for getting to running event loop."""
+        return ast.Assign(
+            targets=[ast.Name(id="loop", ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="asyncio", ctx=ast.Load()),
+                    attr="get_running_loop",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            ),
+        )
 
-        # if not hasattr(self, '_name'): ...
-        has_check = ast.UnaryOp(
+    def _create_module_reference(
+        self, module_name: str, class_name: str, factory_method: str | None
+    ) -> ast.expr:
+        """Create AST reference to module.Class or module.Class.method."""
+        if factory_method:
+            return ast.Attribute(
+                value=ast.Attribute(
+                    value=ast.Name(id=module_name, ctx=ast.Load()),
+                    attr=class_name,
+                    ctx=ast.Load(),
+                ),
+                attr=factory_method,
+                ctx=ast.Load(),
+            )
+        else:
+            return ast.Attribute(
+                value=ast.Name(id=module_name, ctx=ast.Load()),
+                attr=class_name,
+                ctx=ast.Load(),
+            )
+
+    def _create_cache_check(self, cache_attr: str) -> ast.expr:
+        """Create hasattr check for cache attribute."""
+        return ast.UnaryOp(
             op=ast.Not(),
             operand=ast.Call(
                 func=ast.Name(id="hasattr", ctx=ast.Load()),
@@ -206,113 +237,154 @@ class WiringCompiler(WiringBase):
             ),
         )
 
-        return_stmt = ast.Return(
+    def _create_return_statement(self, cache_attr: str) -> ast.stmt:
+        """Create return statement for cached value."""
+        return ast.Return(
             value=ast.Attribute(
                 value=ast.Name(id="self", ctx=ast.Load()),
                 attr=cache_attr,
                 ctx=ast.Load(),
             )
         )
-        # Build the assignment that sets the cache value; different
-        # behavior is required for async vs sync callers.
-        if not aio:
-            assign_cache = ast.Assign(
-                targets=[
-                    ast.Attribute(
-                        value=ast.Name(id="self", ctx=ast.Load()),
-                        attr=cache_attr,
-                        ctx=ast.Store(),
-                    )
-                ],
-                value=call,
-            )
-        else:
-            # Async path: compute local values and call in executor.
-            loop_assign = ast.Assign(
-                targets=[ast.Name(id="loop", ctx=ast.Store())],
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id="asyncio", ctx=ast.Load()),
-                        attr="get_running_loop",
-                        ctx=ast.Load(),
-                    ),
-                    args=[],
-                    keywords=[],
-                ),
-            )
-            # Create a lambda that returns the class call expression
-            # referencing the precomputed locals
-            lambda_expr = ast.Lambda(
-                args=ast.arguments(
-                    posonlyargs=[],
-                    args=[],
-                    vararg=None,
-                    kwarg=None,
-                    defaults=[],
-                    kwonlyargs=[],
-                    kw_defaults=[],
-                ),
-                body=call,
-            )
-            run_call = ast.Await(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id="loop", ctx=ast.Load()),
-                        attr="run_in_executor",
-                        ctx=ast.Load(),
-                    ),
-                    args=[
-                        ast.Constant(value=None),
-                        lambda_expr,
-                    ],
-                    keywords=[],
+
+    def _create_cache_assignment(
+        self, cache_attr: str, value_expr: ast.expr
+    ) -> ast.stmt:
+        """Create assignment to cache attribute."""
+        return ast.Assign(
+            targets=[
+                ast.Attribute(
+                    value=ast.Name(id="self", ctx=ast.Load()),
+                    attr=cache_attr,
+                    ctx=ast.Store(),
                 )
+            ],
+            value=value_expr,
+        )
+
+    def _create_lambda_function(self, body: ast.expr) -> ast.Lambda:
+        """Create a lambda function with the given body."""
+        return ast.Lambda(
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[],
+                vararg=None,
+                kwarg=None,
+                defaults=[],
+                kwonlyargs=[],
+                kw_defaults=[],
+            ),
+            body=body,
+        )
+
+    def _create_executor_call(self, lambda_expr: ast.Lambda) -> ast.expr:
+        """Create run_in_executor call for async compilation."""
+        return ast.Await(
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="loop", ctx=ast.Load()),
+                    attr="run_in_executor",
+                    ctx=ast.Load(),
+                ),
+                args=[ast.Constant(value=None), lambda_expr],
+                keywords=[],
             )
-            assign_cache = ast.Assign(
-                targets=[
-                    ast.Attribute(
-                        value=ast.Name(id="self", ctx=ast.Load()),
-                        attr=cache_attr,
-                        ctx=ast.Store(),
-                    )
-                ],
-                value=run_call,
-            )
-        if_stmt_body = pre_statements.copy()
-        if aio:
-            if_stmt_body.append(loop_assign)
-        if_stmt_body.append(assign_cache)
-        if_stmt = ast.If(test=has_check, body=if_stmt_body, orelse=[])
-        func_def: ast.FunctionDef | ast.AsyncFunctionDef
-        # If the compiled output is thread-safe, inject locking logic
-        if not aio and not thread_safe:
-            func_def = ast.FunctionDef(
+        )
+
+    def _create_function_template(
+        self,
+        name: str,
+        body: list[ast.stmt],
+        is_async: bool,
+    ) -> ast.FunctionDef | ast.AsyncFunctionDef:
+        """Create basic function definition structure."""
+        if is_async:
+            return ast.AsyncFunctionDef(
                 name=name,
                 args=_PROPERTY_ARGS,
-                body=[if_stmt, return_stmt],
+                body=body,
                 decorator_list=[],
                 returns=None,
                 type_comment=None,
                 type_params=[],
             )
-        elif not aio and thread_safe:
-            # Build sync thread-safe version using code template
-            # Build a lambda maker which is a synchronous callable used by
-            # the helper mixin to invoke the constructor within the
-            # instantiation lock management. We pass this maker to
-            # `self._instantiate_attr(name, maker)`.
-            maker = ast.Lambda(
-                args=ast.arguments(
-                    posonlyargs=[],
-                    args=[],
-                    vararg=None,
-                    kwarg=None,
-                    defaults=[],
-                    kwonlyargs=[],
-                    kw_defaults=[],
-                ),
-                body=call,
+        else:
+            return ast.FunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=body,
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
             )
+
+    def _compile_property(
+        self,
+        name: str,
+        module_name: str,
+        class_name: str,
+        factory_method: str | None,
+        data: _ResolvedSpecMapping,
+        *,
+        aio: bool = False,
+        thread_safe: bool = False,
+    ) -> ast.FunctionDef | ast.AsyncFunctionDef:
+        """Build an AST FunctionDef for a cached accessor that returns
+        ``module.class(**data)`` or ``module.class.factory_method(**data)``.
+
+        When ``aio`` is True this function will produce an
+        ``ast.AsyncFunctionDef`` that awaits referenced accessors and calls
+        the blocking constructor in an executor (``loop.run_in_executor``).
+        When ``aio`` is False it produces a standard synchronous
+        ``ast.FunctionDef``.
+        """
+        # Build the target callable: module.Class or module.Class.factoryMethod
+        module_attr = self._create_module_reference(
+            module_name, class_name, factory_method
+        )
+        pre_statements: list[ast.stmt] = []
+        counter = [0]  # For generating unique variable names
+
+        # Normalize and process argument data
+        args_data, kwargs_data = self._normalize_spec_data(data)
+        args, kwargs = self._process_argument_values(
+            args_data,
+            kwargs_data,
+            aio=aio,
+            pre_statements=pre_statements,
+            counter=counter,
+        )
+
+        call = ast.Call(func=module_attr, args=args, keywords=kwargs)
+
+        cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
+
+        # Create reusable components
+        has_check = self._create_cache_check(cache_attr)
+        return_stmt = self._create_return_statement(cache_attr)
+        # Build the assignment that sets the cache value; different
+        # behavior is required for async vs sync callers.
+        if not aio:
+            assign_cache = self._create_cache_assignment(cache_attr, call)
+        else:
+            # Async path: compute local values and call in executor.
+            lambda_expr = self._create_lambda_function(call)
+            pre_statements.append(self._create_loop_assignment())
+            run_call = self._create_executor_call(lambda_expr)
+            assign_cache = self._create_cache_assignment(cache_attr, run_call)
+        if_stmt_body = pre_statements.copy()
+        if_stmt_body.append(assign_cache)
+        if_stmt = ast.If(test=has_check, body=if_stmt_body, orelse=[])
+        func_def: ast.FunctionDef | ast.AsyncFunctionDef
+        # If the compiled output is thread-safe, inject locking logic
+        if not aio and not thread_safe:
+            func_def = self._create_function_template(
+                name, [if_stmt, return_stmt], is_async=False
+            )
+        elif not aio and thread_safe:
+            # Build sync thread-safe version using helper mixin
+            maker = self._create_lambda_function(call)
             call_inst = ast.Call(
                 func=ast.Attribute(
                     value=ast.Name(id="self", ctx=ast.Load()),
@@ -322,58 +394,28 @@ class WiringCompiler(WiringBase):
                 args=[ast.Constant(value=name), maker],
                 keywords=[],
             )
-            assign_cache = ast.Assign(
-                targets=[
-                    ast.Attribute(
-                        value=ast.Name(id="self", ctx=ast.Load()),
-                        attr=cache_attr,
-                        ctx=ast.Store(),
-                    )
-                ],
-                value=call_inst,
-            )
+            assign_cache = self._create_cache_assignment(cache_attr, call_inst)
             if_stmt_body = pre_statements.copy()
             if_stmt_body.append(assign_cache)
-            func_def = ast.FunctionDef(
-                name=name,
-                args=_PROPERTY_ARGS,
-                body=[
+            func_def = self._create_function_template(
+                name,
+                [
                     ast.If(test=has_check, body=if_stmt_body, orelse=[]),
                     return_stmt,
                 ],
-                decorator_list=[],
-                returns=None,
-                type_comment=None,
-                type_params=[],
+                is_async=False,
             )
-        # This branch handles the synchronous, non-thread-safe case
+        # This branch handles the asynchronous, non-thread-safe case
         elif aio and not thread_safe:
-            func_def = ast.AsyncFunctionDef(
-                name=name,
-                args=_PROPERTY_ARGS,
-                body=[if_stmt, return_stmt],
-                decorator_list=[],
-                returns=None,
-                type_comment=None,
-                type_params=[],
+            func_def = self._create_function_template(
+                name, [if_stmt, return_stmt], is_async=True
             )
         else:  # aio and thread_safe
             # Create a maker lambda (synchronous) for the helper
             # mixin and run it in executor. Precomputed locals are
             # already present in `pre_statements` to avoid 'await' in
             # the lambda body.
-            maker = ast.Lambda(
-                args=ast.arguments(
-                    posonlyargs=[],
-                    args=[],
-                    vararg=None,
-                    kwarg=None,
-                    defaults=[],
-                    kwonlyargs=[],
-                    kw_defaults=[],
-                ),
-                body=call,
-            )
+            maker = self._create_lambda_function(call)
             instantiate_call = ast.Call(
                 func=ast.Attribute(
                     value=ast.Name(id="self", ctx=ast.Load()),
@@ -384,18 +426,7 @@ class WiringCompiler(WiringBase):
                 keywords=[],
             )
             # Build lambda passed to executor that calls the mixin
-            executor_lambda = ast.Lambda(
-                args=ast.arguments(
-                    posonlyargs=[],
-                    args=[],
-                    vararg=None,
-                    kwarg=None,
-                    defaults=[],
-                    kwonlyargs=[],
-                    kw_defaults=[],
-                ),
-                body=instantiate_call,
-            )
+            executor_lambda = self._create_lambda_function(instantiate_call)
             run_call = ast.Await(
                 value=ast.Call(
                     func=ast.Attribute(
@@ -407,32 +438,13 @@ class WiringCompiler(WiringBase):
                     keywords=[],
                 )
             )
-            assign_cache = ast.Assign(
-                targets=[
-                    ast.Attribute(
-                        value=ast.Name(id="self", ctx=ast.Load()),
-                        attr=cache_attr,
-                        ctx=ast.Store(),
-                    )
-                ],
-                value=run_call,
-            )
+            assign_cache = self._create_cache_assignment(cache_attr, run_call)
             body = pre_statements.copy()
-            # Ensure we compute the event loop variable before calling into
-            # run_in_executor.
-            body.append(loop_assign)
             body.append(assign_cache)
-            func_def = ast.AsyncFunctionDef(
-                name=name,
-                args=_PROPERTY_ARGS,
-                body=[
-                    ast.If(test=has_check, body=body, orelse=[]),
-                    return_stmt,
-                ],
-                decorator_list=[],
-                returns=None,
-                type_comment=None,
-                type_params=[],
+            func_def = self._create_function_template(
+                name,
+                [ast.If(test=has_check, body=body, orelse=[]), return_stmt],
+                is_async=True,
             )
         return func_def
 

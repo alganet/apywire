@@ -6,7 +6,9 @@
 
 import sys
 from types import ModuleType
-from typing import Optional
+from typing import Dict, List, Optional, Tuple, Union
+
+import pytest
 
 from apywire import Generator, Spec, Wiring
 
@@ -135,77 +137,121 @@ def test_generate_with_defaults() -> None:
             del sys.modules["mockmod_defs"]
 
 
-def test_generate_invalid_format_no_delimiter() -> None:
-    """Test that invalid entry format raises ValueError."""
+@pytest.mark.parametrize(
+    "entry, expected_msg",
+    [
+        ("invalid", "Invalid entry format"),
+        ("Class name", "missing module qualification"),
+        ("myapp.models.SomeClass inst.create.more", "nested factory methods"),
+    ],
+    ids=["no_delimiter", "no_module", "nested_factory"],
+)
+def test_generate_invalid_formats(entry: str, expected_msg: str) -> None:
+    """Test that invalid entry formats raise ValueError with expected
+    message.
+    """
+    with pytest.raises(ValueError, match=expected_msg):
+        Generator.generate(entry)
+
+
+@pytest.mark.parametrize(
+    "annotation, expected_default",
+    [
+        (int, 0),
+        (str, ""),
+        (float, 0.0),
+        (bool, False),
+        (Optional[str], ""),  # Recurses to str default
+        (List[int], []),
+        (Dict[str, int], {}),
+        (Tuple[int, int], ()),
+        (Union[int, str, float], None),
+        (bytes, b""),
+        (complex, 0j),
+        (None, None),  # unknown annotation
+    ],
+    ids=[
+        "int",
+        "str",
+        "float",
+        "bool",
+        "optional",
+        "list",
+        "dict",
+        "tuple",
+        "union",
+        "bytes",
+        "complex",
+        "unknown",
+    ],
+)
+def test_generate_type_defaults(
+    annotation: object, expected_default: object
+) -> None:
+    """Test that various type annotations produce correct defaults."""
+
+    class DynamicTyped:
+        pass
+
+    # Manually set up __init__ without default value
+    def __init__(self, value):  # type: ignore[no-untyped-def]
+        pass
+
+    # Updating the annotation for the 'value' parameter
+    if annotation is not None:
+        __init__.__annotations__ = {"value": annotation}  # type: ignore[misc]
+
+    setattr(DynamicTyped, "__init__", __init__)  # type: ignore[misc]
+    DynamicTyped.__module__ = "mockmod_dyn_typed"
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("mockmod_dyn_typed")
+            self.DynamicTyped = DynamicTyped
+
+    mod = MockModule()
+    sys.modules["mockmod_dyn_typed"] = mod
+
     try:
-        Generator.generate("invalid")
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        assert "Invalid entry format" in str(e)
+        spec = Generator.generate("mockmod_dyn_typed.DynamicTyped obj")
+        assert spec["obj_value"] == expected_default
+    finally:
+        if "mockmod_dyn_typed" in sys.modules:
+            del sys.modules["mockmod_dyn_typed"]
 
 
-def test_generate_invalid_format_no_module() -> None:
-    """Test that entry without module raises ValueError."""
-    try:
-        Generator.generate("Class name")
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        assert "missing module qualification" in str(e)
+def test_generate_multiple_typed_params() -> None:
+    """Test generating spec for a class with multiple typed parameters."""
 
-
-def test_generate_invalid_nested_factory_method() -> None:
-    """Test that nested factory methods raise ValueError."""
-    try:
-        Generator.generate("myapp.models.SomeClass inst.create.more")
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        assert "nested factory methods" in str(e)
-
-
-def test_generate_with_typed_params() -> None:
-    """Test type-aware default generation."""
-
-    class TypedClass:
-        def __init__(
-            self,
-            int_param: int,
-            str_param: str,
-            float_param: float,
-            bool_param: bool,
-            opt_param: Optional[str] = None,
-        ) -> None:
+    class MultiTyped:
+        def __init__(self, year: int, name: str, ratio: float) -> None:
             pass
 
     class MockModule(ModuleType):
         def __init__(self) -> None:
-            super().__init__("mockmod_typed")
-            self.TypedClass = TypedClass
+            super().__init__("mockmod_multi_typed")
+            self.MultiTyped = MultiTyped
 
     mod = MockModule()
-    sys.modules["mockmod_typed"] = mod
+    sys.modules["mockmod_multi_typed"] = mod
 
     try:
-        spec = Generator.generate("mockmod_typed.TypedClass obj")
+        spec = Generator.generate("mockmod_multi_typed.MultiTyped obj")
 
-        # Use whole-output assertion with expected spec
         expected_spec: Spec = {
-            "mockmod_typed.TypedClass obj": {
-                "bool_param": "{obj_bool_param}",
-                "float_param": "{obj_float_param}",
-                "int_param": "{obj_int_param}",
-                "opt_param": "{obj_opt_param}",
-                "str_param": "{obj_str_param}",
+            "mockmod_multi_typed.MultiTyped obj": {
+                "name": "{obj_name}",
+                "ratio": "{obj_ratio}",
+                "year": "{obj_year}",
             },
-            "obj_bool_param": False,
-            "obj_float_param": 0.0,
-            "obj_int_param": 0,
-            "obj_opt_param": None,
-            "obj_str_param": "",
+            "obj_name": "",
+            "obj_ratio": 0.0,
+            "obj_year": 0,
         }
         assert spec == expected_spec
     finally:
-        if "mockmod_typed" in sys.modules:
-            del sys.modules["mockmod_typed"]
+        if "mockmod_multi_typed" in sys.modules:
+            del sys.modules["mockmod_multi_typed"]
 
 
 def test_generate_with_dependency() -> None:
@@ -318,44 +364,6 @@ def test_generate_with_factory_method() -> None:
     finally:
         if "mockmod_factory" in sys.modules:
             del sys.modules["mockmod_factory"]
-
-
-def test_generate_list_and_dict_types() -> None:
-    """Test handling of list and dict type annotations."""
-    from typing import Dict, List
-
-    class Container:
-        def __init__(
-            self,
-            items: List[int],
-            mapping: Dict[str, int],
-        ) -> None:
-            pass
-
-    class MockModule(ModuleType):
-        def __init__(self) -> None:
-            super().__init__("mockmod_container")
-            self.Container = Container
-
-    mod = MockModule()
-    sys.modules["mockmod_container"] = mod
-
-    try:
-        spec = Generator.generate("mockmod_container.Container c")
-
-        # Use whole-output assertion with expected spec
-        expected_spec: Spec = {
-            "mockmod_container.Container c": {
-                "items": "{c_items}",
-                "mapping": "{c_mapping}",
-            },
-            "c_items": [],
-            "c_mapping": {},
-        }
-        assert spec == expected_spec
-    finally:
-        if "mockmod_container" in sys.modules:
-            del sys.modules["mockmod_container"]
 
 
 def test_generate_no_params() -> None:
@@ -524,129 +532,6 @@ def test_generate_with_varargs() -> None:
     finally:
         if "mockmod_varargs" in sys.modules:
             del sys.modules["mockmod_varargs"]
-
-
-def test_generate_complex_union_type() -> None:
-    """Test handling of complex Union types (not just Optional)."""
-    from typing import Union
-
-    class WithUnion:
-        def __init__(self, value: Union[int, str, float]) -> None:
-            pass
-
-    class MockModule(ModuleType):
-        def __init__(self) -> None:
-            super().__init__("mockmod_union")
-            self.WithUnion = WithUnion
-
-    mod = MockModule()
-    sys.modules["mockmod_union"] = mod
-
-    try:
-        spec = Generator.generate("mockmod_union.WithUnion obj")
-        # Complex unions should default to None
-        expected_spec: Spec = {
-            "mockmod_union.WithUnion obj": {
-                "value": "{obj_value}",
-            },
-            "obj_value": None,
-        }
-        assert spec == expected_spec
-    finally:
-        if "mockmod_union" in sys.modules:
-            del sys.modules["mockmod_union"]
-
-
-def test_generate_tuple_type() -> None:
-    """Test handling of tuple type annotations."""
-    from typing import Tuple
-
-    class WithTuple:
-        def __init__(self, coords: Tuple[int, int]) -> None:
-            pass
-
-    class MockModule(ModuleType):
-        def __init__(self) -> None:
-            super().__init__("mockmod_tuple")
-            self.WithTuple = WithTuple
-
-    mod = MockModule()
-    sys.modules["mockmod_tuple"] = mod
-
-    try:
-        spec = Generator.generate("mockmod_tuple.WithTuple obj")
-        expected_spec: Spec = {
-            "mockmod_tuple.WithTuple obj": {
-                "coords": "{obj_coords}",
-            },
-            "obj_coords": (),  # type: ignore[dict-item]
-        }
-        assert spec == expected_spec
-    finally:
-        if "mockmod_tuple" in sys.modules:
-            del sys.modules["mockmod_tuple"]
-
-
-def test_generate_unknown_annotation() -> None:
-    """Test handling of unknown/complex annotation types."""
-
-    class WithCustom:
-        # Use a non-type annotation that's not in the standard set
-        def __init__(self, value) -> None:  # type: ignore[no-untyped-def]
-            pass
-
-    class MockModule(ModuleType):
-        def __init__(self) -> None:
-            super().__init__("mockmod_custom")
-            self.WithCustom = WithCustom  # type: ignore[misc]
-
-    mod = MockModule()
-    sys.modules["mockmod_custom"] = mod
-
-    try:
-        spec = Generator.generate("mockmod_custom.WithCustom obj")
-        # Unknown types should default to None
-        expected_spec: Spec = {
-            "mockmod_custom.WithCustom obj": {
-                "value": "{obj_value}",
-            },
-            "obj_value": None,
-        }
-        assert spec == expected_spec
-    finally:
-        if "mockmod_custom" in sys.modules:
-            del sys.modules["mockmod_custom"]
-
-
-def test_generate_bytes_and_complex_types() -> None:
-    """Test handling of bytes and complex number types."""
-
-    class WithTypes:
-        def __init__(self, data: bytes, number: complex) -> None:
-            pass
-
-    class MockModule(ModuleType):
-        def __init__(self) -> None:
-            super().__init__("mockmod_types")
-            self.WithTypes = WithTypes
-
-    mod = MockModule()
-    sys.modules["mockmod_types"] = mod
-
-    try:
-        spec = Generator.generate("mockmod_types.WithTypes obj")
-        expected_spec: Spec = {
-            "mockmod_types.WithTypes obj": {
-                "data": "{obj_data}",
-                "number": "{obj_number}",
-            },
-            "obj_data": b"",
-            "obj_number": 0j,
-        }
-        assert spec == expected_spec
-    finally:
-        if "mockmod_types" in sys.modules:
-            del sys.modules["mockmod_types"]
 
 
 def test_generate_non_constant_default() -> None:

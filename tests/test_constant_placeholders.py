@@ -12,14 +12,23 @@ import pytest
 import apywire
 
 
-def test_basic_constant_expansion() -> None:
-    """Test basic placeholder expansion in constants."""
-    spec: apywire.Spec = {
-        "a": "foo",
-        "b": "{a} bar",
-    }
+@pytest.mark.parametrize(
+    "spec, expected_key, expected_val",
+    [
+        ({"a": "foo", "b": "{a} bar"}, "b", "foo bar"),
+        ({"port": 5432, "url": "localhost:{port}"}, "url", "localhost:5432"),
+        ({"number": 42, "message": "{number}"}, "message", "42"),
+    ],
+    ids=["basic", "int_port", "int_ref"],
+)
+def test_constant_value_expansion(
+    spec: apywire.Spec, expected_key: str, expected_val: str
+) -> None:
+    """Test basic placeholder expansion in constants with various value
+    types.
+    """
     wired = apywire.Wiring(spec, thread_safe=False)
-    assert wired._values["b"] == "foo bar"
+    assert wired._values[expected_key] == expected_val
 
 
 def test_nested_constant_dependencies() -> None:
@@ -115,16 +124,36 @@ def test_circular_with_wired_objects() -> None:
         del sys.modules["test_module"]
 
 
-def test_complex_nested_structures() -> None:
-    """Test placeholder expansion in nested data structures."""
-    spec: apywire.Spec = {
-        "base": "/app",
-        "config": {"path": "{base}/config.yaml"},
-    }
+@pytest.mark.parametrize(
+    "spec, expected_key, expected_val",
+    [
+        (
+            {"base": "/app", "config": {"path": "{base}/config.yaml"}},
+            "config",
+            {"path": "/app/config.yaml"},
+        ),
+        (
+            {
+                "base": "http://api",
+                "endpoints": ["{base}/users", "{base}/posts"],
+            },
+            "endpoints",
+            ["http://api/users", "http://api/posts"],
+        ),
+        (
+            {"base": "test", "data": ("{base}", "{base}")},
+            "data",
+            ("test", "test"),
+        ),
+    ],
+    ids=["dict", "list", "tuple"],
+)
+def test_constant_collection_expansion(
+    spec: apywire.Spec, expected_key: str, expected_val: object
+) -> None:
+    """Test placeholder expansion in nested data structures and collections."""
     wired = apywire.Wiring(spec, thread_safe=False)
-
-    assert wired._values["base"] == "/app"
-    assert wired._values["config"] == {"path": "/app/config.yaml"}
+    assert wired._values[expected_key] == expected_val
 
 
 def test_string_representation_of_wired_object() -> None:
@@ -174,31 +203,6 @@ def test_with_thread_safe_mode() -> None:
     wired = apywire.Wiring(spec, thread_safe=True)
 
     assert wired._values["db_url"] == "postgresql://localhost:5432/mydb"
-
-
-def test_integer_constant_in_placeholder() -> None:
-    """Test that non-string constants are converted to strings."""
-    spec: apywire.Spec = {
-        "port": 5432,
-        "url": "localhost:{port}",
-    }
-    wired = apywire.Wiring(spec, thread_safe=False)
-
-    assert wired._values["url"] == "localhost:5432"
-
-
-def test_list_with_placeholders() -> None:
-    """Test placeholder expansion in lists."""
-    spec: apywire.Spec = {
-        "base": "http://api",
-        "endpoints": ["{base}/users", "{base}/posts"],
-    }
-    wired = apywire.Wiring(spec, thread_safe=False)
-
-    assert wired._values["endpoints"] == [
-        "http://api/users",
-        "http://api/posts",
-    ]
 
 
 def test_no_placeholders() -> None:
@@ -258,32 +262,6 @@ def test_interpolate_placeholders_unknown_placeholder() -> None:
         wired._interpolate_placeholders(
             "Test {unknown}", {"base": "value"}, "test"
         )
-
-
-def test_resolve_constant_non_string_reference() -> None:
-    """Test _resolve_constant with non-string reference value."""
-    from apywire import Spec, Wiring
-
-    # Constant referencing an integer constant
-    spec: Spec = {"number": 42, "message": "{number}"}
-    wired = Wiring(spec, thread_safe=False)
-
-    # The value should have been resolved to string "42"
-    assert wired._values["message"] == "42"
-
-
-def test_resolve_constant_with_tuple() -> None:
-    """Test _resolve_constant with tuple values."""
-    from typing import cast
-
-    from apywire import Spec, Wiring
-
-    # Constant with tuple containing placeholders
-    spec = cast(Spec, {"base": "test", "data": ("{base}", "{base}")})
-    wired = Wiring(spec, thread_safe=False)
-
-    # Should resolve tuple placeholders
-    assert wired._values["data"] == ("test", "test")
 
 
 def test_transitive_promotion_of_constants() -> None:
