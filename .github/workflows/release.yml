@@ -22,8 +22,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - uses: astral-sh/setup-uv@v7
       - run: sudo apt-get install -y patchelf
-      - run: make pip
+      - run: make sync-frozen
       - run: make publish
         env:
           TWINE_USERNAME: __token__

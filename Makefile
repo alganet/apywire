@@ -2,39 +2,38 @@
 #
 # SPDX-License-Identifier: ISC
 
-.PHONY: all format lint test coverage clean publish pip reuse .venv docs-serve docs-build
+
+.PHONY: all sync sync-frozen format lint test coverage clean build dist repair-wheels publish reuse docs-serve docs-build docs-deploy-dev-main docs-deploy-versioned
 
 all: format lint coverage build
 
-pip:
-	python -m pip install --upgrade pip
-	python -m pip install -e ".[dev]"
+sync:
+	uv sync --extra dev
+
+sync-frozen:
+	uv sync --frozen --extra dev
 
 reuse:
-	reuse annotate \
+	uv run reuse annotate \
 		--copyright "Alexandre Gomes Gaigalas <alganet@gmail.com>" \
 		--license ISC \
 		--recursive .
 
-.venv:
-	python -m venv .venv
-	. .venv/bin/activate && make pip
-
 format: reuse
-	python -m black apywire tests
-	python -m isort apywire tests
+	uv run black apywire tests
+	uv run isort apywire tests
 
 lint:
-	python -m reuse lint
-	python -m flake8 apywire tests
-	python -m mypy apywire tests
+	uv run reuse lint
+	uv run flake8 apywire tests
+	uv run mypy apywire tests
 
 test:
-	python -m pytest -q
+	uv run pytest -q
 
 coverage:
 	rm -f apywire/*.so apywire/wiring.c
-	python -m pytest --cov
+	uv run pytest --cov
 
 clean:
 	find . -name __pycache__ -type d -exec rm -rf {} +
@@ -43,24 +42,33 @@ clean:
 	rm -rf .mypy_cache .pytest_cache *.egg-info dist build
 
 build:
-	python setup.py build_ext --inplace
+	uv run python setup.py build_ext --inplace
 
 dist:
-	python -m build
+	uv run python -m build
 
 repair-wheels:
-	python -m pip install --upgrade auditwheel
-	auditwheel repair dist/*.whl -w dist/repaired
+	uv run auditwheel repair dist/*.whl -w dist/repaired
 	rm -f dist/*.whl
 	mv dist/repaired/*.whl dist/
 	rm -rf dist/repaired
 
 publish: dist repair-wheels
-	python -m pip install --upgrade twine
-	python -m twine upload dist/*
+	uv run twine upload dist/*
 
 docs-serve:
-	python -m mkdocs serve
+	uv run mkdocs serve
 
 docs-build:
-	python -m mkdocs build
+	uv run mkdocs build
+
+docs-deploy-dev-main:
+	uv run mike deploy --push --branch website dev-main
+
+docs-deploy-versioned:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "VERSION is required (e.g. make $@ VERSION=0.2.0)"; \
+		exit 2; \
+	fi
+	uv run mike deploy --push --update-aliases --branch website $(VERSION) latest
+	uv run mike set-default --push --branch website latest

@@ -10,10 +10,10 @@ This guide will help you get up and running with apywire quickly.
 
 ## Installation
 
-Install apywire using pip:
+Install apywire using uv:
 
 ```bash
-pip install apywire
+uv pip install apywire
 ```
 
 apywire requires Python 3.12 or later and has no external runtime dependencies.
@@ -25,9 +25,7 @@ If you want to contribute to apywire or run the tests:
 ```bash
 git clone https://github.com/alganet/apywire.git
 cd apywire
-make .venv
-source .venv/bin/activate
-make pip
+uv sync --extra dev
 ```
 
 ## Quick Start

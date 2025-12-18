@@ -13,7 +13,7 @@ apywire provides a CLI for generating specs from class introspection and compili
 The CLI is included with apywire:
 
 ```bash
-pip install apywire
+uv pip install apywire
 ```
 
 Verify the installation:

@@ -51,9 +51,11 @@ dev = [
     "pytest-cov",
     "pytest",
     "reuse",
+    "setuptools",
     "twine",
     "tomli_w",
     "types-setuptools",
+    "wheel",
 ]
 
 [tool.setuptools.packages.find]

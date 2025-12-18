@@ -24,14 +24,12 @@ Clone the repository and set up your development environment:
 git clone https://github.com/alganet/apywire.git
 cd apywire
 
-# Create virtual environment and install dependencies
-make .venv
-source .venv/bin/activate
-make pip
+# Install dev dependencies
+uv sync --extra dev
 ```
 
 This will:
-1. Create a `.venv` virtual environment
+1. Create (or update) a `.venv` project environment
 2. Install all development dependencies including mkdocs, pytest, mypy, etc.
 
 ## Development Workflow
