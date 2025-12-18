@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: ISC
 
-
 name: CI
 
 on:
@@ -15,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  build-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,6 +25,7 @@ jobs:
     - uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
-    - run: make pip
+    - uses: astral-sh/setup-uv@v7
+    - run: make sync-frozen
     - run: make lint
     - run: make coverage

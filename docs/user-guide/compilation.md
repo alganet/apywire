@@ -197,7 +197,7 @@ setup(
 ### Step 3: Build
 
 ```bash
-python setup.py build_ext --inplace
+uv run python setup.py build_ext --inplace
 ```
 
 This generates `wiring.c` and `wiring.so` (compiled extension).
@@ -326,7 +326,7 @@ assert wired_runtime.now() == wired_compiled.now()
 ```bash
 # In your CI/CD pipeline
 python scripts/generate_wiring.py
-python setup.py build_ext --inplace  # Optional: Cython compile
+uv run python setup.py build_ext --inplace  # Optional: Cython compile
 ```
 
 ### 2. Version Control Generated Code

@@ -26,7 +26,7 @@ Lazy object wiring and dependency injection for Python 3.12+
 ## Installation
 
 ```bash
-pip install apywire
+uv pip install apywire
 ```
 
 ## Quick Example
@@ -58,8 +58,8 @@ make docs-serve  # http://127.0.0.1:8000
 ## Development
 
 ```bash
-make .venv && source .venv/bin/activate  # Setup
-make all                                 # Format, lint, test, build
+uv sync --extra dev  # Setup
+make all             # Format, lint, test, build
 ```
 
 See [docs/development.md](docs/development.md) for guidelines.

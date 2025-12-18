@@ -15,13 +15,13 @@ We instantiate `fakeredis.FakeRedis` directly from the configuration file, passi
 This example requires `fakeredis` and `pyyaml`.
 
 ```bash
-pip install -r requirements.txt
+uv run --with fakeredis --with pyyaml --with apywire python main.py
 ```
 
 ## Running the Example
 
 ```bash
-python main.py
+uv run --with fakeredis --with pyyaml --with apywire python main.py
 ```
 
 Expected output:

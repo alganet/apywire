@@ -12,7 +12,7 @@ For the complete development guide, please see **[docs/development.md](../docs/d
 ## Quick Start
 
 1. Clone the repository
-2. Run `make .venv && source .venv/bin/activate && make pip`
+2. Run `uv sync --extra dev`
 3. Run `make all` to verify everything works
 
 ## Before Submitting a Pull Request
