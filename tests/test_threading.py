@@ -27,6 +27,19 @@ class AsyncSingletonProtocol(Protocol):
     def singleton(self) -> Awaitable[object]: ...
 
 
+class ConcurrentFactoryModule(Protocol):
+    """Protocol for concurrent_factory module."""
+
+    A: type
+    B: type
+
+
+class ClassWithDep(Protocol):
+    """Protocol for classes with a dep attribute."""
+
+    dep: object
+
+
 def test_thread_safe_singleton_instantiation() -> None:
     """Test that multiple threads instantiating singleton."""
 
@@ -385,12 +398,9 @@ def test_non_threaded_mode_circular_dependency() -> None:
             "mymod_circ_nonthreaded.A a": {"b": "{b}"},
             "mymod_circ_nonthreaded.B b": {"a": "{a}"},
         }
-        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-        try:
-            _ = wired.a()
-            assert False, "Should have raised CircularWiringError"
-        except apywire.CircularWiringError as e:
-            assert "Circular wiring dependency detected" in str(e)
+        with pytest.raises(apywire.CircularWiringError) as exc_info:
+            apywire.Wiring(spec, thread_safe=False)
+        assert "Circular wiring dependency detected" in str(exc_info.value)
     finally:
         if "mymod_circ_nonthreaded" in sys.modules:
             del sys.modules["mymod_circ_nonthreaded"]
@@ -398,6 +408,75 @@ def test_non_threaded_mode_circular_dependency() -> None:
 
 def test_threaded_mode_circular_dependency() -> None:
     """Test that circular dependency detection works in threaded mode."""
+
+
+def test_threaded_factory_single_init_and_waiters_receive_same_inst() -> None:
+    """Concurrent factory-based cyclic instantiation results
+    in single init and same instance for waiters.
+    """
+    import sys
+    import types
+
+    class ConcurrentFactoryModuleImpl(types.ModuleType):
+        A: type
+        B: type
+
+    mod = ConcurrentFactoryModuleImpl("concurrent_factory")
+
+    class ConcurrentA:
+        inst_count: int = 0
+
+        def __init__(self, dep: object | None = None) -> None:
+            type(self).inst_count += 1
+            self.dep = dep
+
+        @classmethod
+        def create(cls, dep: object | None = None) -> "ConcurrentA":
+            return cls(dep)
+
+    class ConcurrentB:
+        inst_count: int = 0
+
+        def __init__(self, dep: object | None = None) -> None:
+            type(self).inst_count += 1
+            self.dep = dep
+
+        @classmethod
+        def create(cls, dep: object | None = None) -> "ConcurrentB":
+            return cls(dep)
+
+    mod.A = ConcurrentA
+    mod.B = ConcurrentB
+    sys.modules["concurrent_factory"] = mod
+
+    try:
+        spec: apywire.Spec = {
+            "concurrent_factory.A a.create": {"dep": "{b}"},
+            "concurrent_factory.B b.create": {"dep": "{a}"},
+        }
+        wired: apywire.Wiring = apywire.Wiring(
+            spec, thread_safe=True, allow_partial=True
+        )
+
+        results: list[object] = []
+
+        def worker() -> None:
+            results.append(wired.a())
+
+        threads: list[threading.Thread] = []
+        for _ in range(10):
+            t = threading.Thread(target=worker)
+            threads.append(t)
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert ConcurrentA.inst_count == 1
+        assert ConcurrentB.inst_count == 1
+        assert all(r is results[0] for r in results)
+    finally:
+        if "concurrent_factory" in sys.modules:
+            del sys.modules["concurrent_factory"]
 
     class A:
         def __init__(self, b: object) -> None:
@@ -407,25 +486,25 @@ def test_threaded_mode_circular_dependency() -> None:
         def __init__(self, a: object) -> None:
             self.a = a
 
-    class MockModule(ModuleType):
+    class CircThreadedModuleImpl(ModuleType):
+        A: type
+        B: type
+
         def __init__(self) -> None:
             super().__init__("mymod_circ_threaded")
             self.A = A
             self.B = B
 
-    mod = MockModule()
-    sys.modules["mymod_circ_threaded"] = mod
+    circ_mod = CircThreadedModuleImpl()
+    sys.modules["mymod_circ_threaded"] = circ_mod
     try:
-        spec: apywire.Spec = {
+        circ_spec: apywire.Spec = {
             "mymod_circ_threaded.A a": {"b": "{b}"},
             "mymod_circ_threaded.B b": {"a": "{a}"},
         }
-        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=True)
-        try:
-            _ = wired.a()
-            assert False, "Should have raised CircularWiringError"
-        except apywire.CircularWiringError as e:
-            assert "Circular wiring dependency detected" in str(e)
+        with pytest.raises(apywire.CircularWiringError) as exc_info:
+            apywire.Wiring(circ_spec, thread_safe=True)
+        assert "Circular wiring dependency detected" in str(exc_info.value)
     finally:
         if "mymod_circ_threaded" in sys.modules:
             del sys.modules["mymod_circ_threaded"]

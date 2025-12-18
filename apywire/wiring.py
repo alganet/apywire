@@ -117,6 +117,7 @@ class WiringBase:
         thread_safe: bool = False,
         max_lock_attempts: int = 10,
         lock_retry_sleep: float = 0.01,
+        allow_partial: bool = False,
     ) -> None:
         """Initialize a Wiring container.
 
@@ -127,17 +128,33 @@ class WiringBase:
                                (only when thread_safe=True).
             lock_retry_sleep: Sleep time in seconds between lock retries
                               (only when thread_safe=True).
+            allow_partial: If True, partial-construction cycles are allowed.
         """
         self._thread_safe = thread_safe
         self._max_lock_attempts = max_lock_attempts
         self._lock_retry_sleep = lock_retry_sleep
+        # Allow partial is an early flag needed when validating dependency
+        # graphs — store it before performing cycle checks.
+        self.allow_partial = allow_partial
 
         parsed: list[_UnresolvedParsedEntry] = []
         consts: dict[str, _SpecMapping | _ConstantValue] = {}
 
-        # First pass: classify entries into wired classes or constants
+        # Build unified dependency mapping to detect cycles early (Kahn)
+        all_deps: dict[str, set[str]] = {}
         for key, value in spec.items():
             entry = self._parse_spec_entry(key, value)
+            if entry is None:
+                name = key
+            else:
+                name = entry.name
+
+            # Find placeholder names in the raw spec value; this works for
+            # both constants (string placeholders) and wired entries
+            placeholder_names = self._find_placeholder_names(value)
+            all_deps[name] = placeholder_names
+
+            # Continue classification into wired classes or constants
             if entry is not None:
                 parsed.append(entry)
             else:
@@ -200,13 +217,45 @@ class WiringBase:
             else:
                 const_with_const_refs[key] = value
 
-        # Topologically sort and expand constant-only refs
+        # Determine ordering for constant-only references while avoiding
+        # duplicate Kahn runs. The strict (non-allow_partial) mode must run
+        # Kahn on the full dependency graph to detect cycles early at
+        # container initialization time. When partial-construction is
+        # enabled, only the constant-only subset needs to be checked.
+        full_order: list[str] | None = None
+        if not self.allow_partial and all_deps:
+            # Strict mode: validate the entire dependency graph now (raise
+            # CircularWiringError if a cycle is present). Store the full
+            # ordering to reuse for constants below.
+            full_order = _topological_sort(
+                all_deps, error_prefix="Circular wiring dependency detected"
+            )
+
+        sorted_const_keys: list[str]
         if const_with_const_refs:
             const_deps = {
                 k: self._find_placeholder_names(v)
                 for k, v in const_with_const_refs.items()
             }
-            sorted_const_keys = self._topological_sort(const_deps)
+            if self.allow_partial:
+                # Only constants are relevant; a single Kahn is sufficient
+                sorted_const_keys = _topological_sort(
+                    const_deps,
+                    error_prefix="Circular wiring dependency detected",
+                )
+            else:
+                # Strict mode: reuse the global order if available; otherwise
+                # fall back to sorting the constants subset (no wired entries).
+                if full_order is not None:
+                    const_keys = set(const_with_const_refs.keys())
+                    sorted_const_keys = [
+                        n for n in full_order if n in const_keys
+                    ]
+                else:
+                    sorted_const_keys = _topological_sort(
+                        const_deps,
+                        error_prefix="Circular wiring dependency detected",
+                    )
         else:
             sorted_const_keys = []
 
@@ -229,6 +278,7 @@ class WiringBase:
                 None,  # No factory method
                 cast(str | _WiredRef, self._resolve(value)),
             )
+
         if not self._thread_safe:
             # Non-thread-safe mode: use simple list for resolving stack
             self._resolving_stack: list[str] = []
@@ -365,56 +415,7 @@ class WiringBase:
                 names.update(self._find_placeholder_names(v))
         return names
 
-    def _topological_sort(
-        self, dependencies: dict[str, set[str]]
-    ) -> list[str]:
-        """Topologically sort items by dependency order using Kahn's algorithm.
-
-        Args:
-            dependencies: Mapping of item names to their dependencies
-
-        Returns:
-            List of items in dependency order (dependencies first)
-
-        Raises:
-            CircularWiringError: If circular dependencies detected
-        """
-        # Calculate in-degree (number of dependencies) for each node
-        # Pre-convert to set for efficient intersection
-        all_nodes = set(dependencies.keys())
-        in_degree: dict[str, int] = {}
-        for node, deps in dependencies.items():
-            # Filter to only dependencies within this set
-            internal_deps = deps & all_nodes
-            in_degree[node] = len(internal_deps)
-
-        # Start with nodes that have no dependencies (within this set)
-        queue: deque[str] = deque(
-            [node for node, degree in in_degree.items() if degree == 0]
-        )
-        result: list[str] = []
-
-        while queue:
-            node = queue.popleft()
-            result.append(node)
-
-            # Find nodes that depend on this node (within this set)
-            for other_node, deps in dependencies.items():
-                if node in deps:
-                    in_degree[other_node] -= 1
-                    if in_degree[other_node] == 0:
-                        queue.append(other_node)
-
-        # If we couldn't process all nodes, there's a cycle
-        if len(result) != len(dependencies):
-            # Find nodes in cycle for error message
-            unprocessed = [n for n in dependencies if n not in result]
-            raise CircularWiringError(
-                f"Circular dependency detected in constants: "
-                f"{', '.join(unprocessed)}"
-            )
-
-        return result
+    # `_find_wiredref_names` removed — unused.
 
     def _resolve_constant(
         self, value: _SpecValue, resolved: dict[str, _RuntimeValue]
@@ -463,3 +464,60 @@ class WiringBase:
         elif isinstance(value, tuple):
             return tuple(self._resolve_constant(v, resolved) for v in value)
         return value
+
+
+def _topological_sort(
+    dependencies: dict[str, set[str]], *, error_prefix: str
+) -> list[str]:
+    """Topologically sort items by dependency order using Kahn's algorithm.
+
+    This implementation builds a reverse adjacency map so each node can
+    efficiently iterate only over nodes that depend on it (O(V+E)).
+
+    Args:
+        dependencies: Mapping of item names to their dependencies
+        error_prefix: Error message prefix used when a cycle is found
+
+    Returns:
+        List of items in dependency order (dependencies first)
+
+    Raises:
+        CircularWiringError: If circular dependencies detected
+    """
+    # Consider only mapping nodes
+    all_nodes = set(dependencies.keys())
+
+    # Build in-degree counts and reverse adjacency mapping
+    in_degree: dict[str, int] = {node: 0 for node in all_nodes}
+    reverse_adj: dict[str, set[str]] = {node: set() for node in all_nodes}
+
+    for node, deps in dependencies.items():
+        internal_deps = deps & all_nodes
+        in_degree[node] = len(internal_deps)
+        for dep in internal_deps:
+            reverse_adj[dep].add(node)
+
+    # Initialize queue with nodes that have no internal dependencies
+    queue: deque[str] = deque([n for n, d in in_degree.items() if d == 0])
+    result: list[str] = []
+
+    while queue:
+        node = queue.popleft()
+        result.append(node)
+
+        # Process dependents of this node
+        for dependent in reverse_adj.get(node, ()):
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                queue.append(dependent)
+
+    # If we couldn't process all nodes, there's a cycle
+    if len(result) != len(all_nodes):
+        unprocessed = [n for n in all_nodes if n not in result]
+        raise CircularWiringError(f"{error_prefix}: {', '.join(unprocessed)}")
+
+    return result
+
+
+# Duplicate `_WiredRef` definition removed — the class is defined above near
+# the top of the module to keep related logic together.

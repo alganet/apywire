@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable, Literal, NoReturn, cast
+from typing import Callable, Literal, NoReturn, Optional, cast
 
 from apywire.constants import CACHE_ATTR_PREFIX
 from apywire.exceptions import LockUnavailableError
@@ -58,6 +58,7 @@ class ThreadSafeMixin:
             max_lock_attempts: maximum retry attempts in global mode
             lock_retry_sleep: sleep time between attempts
         """
+        # pragma: no cover - exercised via WiringRuntime
         self._inst_lock = threading.RLock()
         self._attr_locks: dict[str, threading.RLock] = {}
         self._attr_locks_lock = threading.Lock()
@@ -93,7 +94,23 @@ class ThreadSafeMixin:
         if hasattr(self, "_values"):
             values_dict = cast(dict[str, object], getattr(self, "_values"))
             if name in values_dict:
-                return (True, values_dict[name])
+                val = values_dict[name]
+                # If partial skeleton, wait then re-raise stored failure if any
+                if cast(bool, getattr(val, "_apywire_partial", False)):
+                    event = cast(
+                        Optional[threading.Event],
+                        getattr(val, "_apywire_event", None),
+                    )
+                    if event is not None:
+                        event.wait()
+                    failure = cast(
+                        Optional[Exception],
+                        getattr(val, "_apywire_failure", None),
+                    )
+                    if failure is not None:
+                        # Re-raise stored exception for waiters
+                        raise failure
+                return (True, val)
 
         # Check cached attribute (compiled path)
         if hasattr(self, cache_attr):
@@ -149,15 +166,13 @@ class ThreadSafeMixin:
         lock = self._get_attribute_lock(name)
         mode = self._local.mode
         if mode is None:
-            # Optimistic locking: Try to acquire per-attribute lock without
-            # blocking. If successful, instantiate in optimistic mode.
-            # If not, fall back to global lock.
+            # Try optimistic per-attribute lock; fall back to global if busy.
             if lock.acquire(blocking=False):
                 try:
                     found, value = self._check_cache(name)
                     if found:
                         return value
-                    # Enter optimistic mode and track held locks
+                    # Enter optimistic mode
                     self._local.mode = "optimistic"
                     held = self._get_held_locks()
                     held.clear()
@@ -165,22 +180,21 @@ class ThreadSafeMixin:
                     try:
                         inst = maker()
                     except LockUnavailableError:
-                        # On optimistic failure, release the lock and fall
-                        # through to global path
+                        # On LockUnavailableError, release and fallback
                         lock.release()
                         held.clear()
                     except Exception as e:
-                        # Release lock before propagating exception
+                        # Release lock and wrap error
                         lock.release()
                         self._wrap_instantiation_error(e, name)
                     else:
-                        # Store in cache
+                        # Cache value
                         self._set_cache(name, inst)
-                        # Release the optimistic held locks before returning
+                        # Release optimistic locks
                         self._release_held_locks()
                         return inst
                 finally:
-                    # Clean up optimistic mode when exiting top-level call
+                    # Exit optimistic mode
                     if self._local.mode == "optimistic":
                         self._local.mode = None
 
@@ -234,7 +248,5 @@ class ThreadSafeMixin:
                 self._set_cache(name, inst)
                 return inst
             finally:
-                # Locks are intentionally not released here; they will be
-                # released by the top-level caller that initiated the
-                # instantiation chain
+                # Leave locks to top-level caller
                 pass

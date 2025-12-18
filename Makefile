@@ -19,7 +19,7 @@ reuse:
 		--license ISC \
 		--recursive .
 
-format: reuse
+format:
 	uv run black apywire tests
 	uv run isort apywire tests
 

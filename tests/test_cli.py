@@ -2,14 +2,16 @@
 #
 # SPDX-License-Identifier: ISC
 
+import argparse
 import subprocess
 import sys
 from io import StringIO
+from typing import cast
 from unittest.mock import patch
 
 import pytest
 
-from apywire.__main__ import main
+from apywire.__main__ import cmd_compile, cmd_generate, main
 
 
 @pytest.mark.parametrize(
@@ -257,6 +259,59 @@ def test_cli_compile_parsing_errors(
     assert result == 1
     stderr_output = mock_stderr.getvalue()
     assert expected_err in stderr_output
+
+
+def test_cli_generate_reports_generation_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fail(*args: object, **kwargs: object) -> list[str]:
+        raise RuntimeError("explode")
+
+    monkeypatch.setattr("apywire.__main__.Generator.generate", _fail)
+
+    with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+        result = main(
+            ["generate", "--format", "json", "collections.OrderedDict d"]
+        )
+
+    assert result == 1
+    assert "Error generating specification" in mock_stderr.getvalue()
+
+
+def test_cli_generate_unknown_format_returns_error() -> None:
+    args = argparse.Namespace(
+        format="yaml", entries=cast(list[str], ["collections.OrderedDict d"])
+    )
+
+    with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+        result = cmd_generate(args)
+
+    assert result == 1
+    assert "Unknown format: yaml" in mock_stderr.getvalue()
+
+
+def test_cli_compile_unknown_format_returns_error() -> None:
+    args = argparse.Namespace(
+        format="yaml",
+        aio=False,
+        thread_safe=False,
+        input_file="-",
+    )
+
+    with patch("sys.stdin", StringIO("{}")):
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            result = cmd_compile(args)
+
+    assert result == 1
+    assert "Unknown format: yaml" in mock_stderr.getvalue()
+
+
+def test_cli_compile_missing_file_returns_error() -> None:
+    with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+        result = main(["compile", "--format", "json", "missing-file.json"])
+
+    assert result == 1
+    assert "Error reading file" in mock_stderr.getvalue()
 
 
 def test_cli_generate_toml_write_error() -> None:

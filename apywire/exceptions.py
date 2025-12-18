@@ -34,6 +34,24 @@ class CircularWiringError(WiringError):
     """
 
 
+class PartialConstructionAccessError(WiringError):
+    """Raised when attempting to access or call an object that is still in
+    partial construction (placeholder inserted but not yet finalized).
+
+    This error indicates the wiring is in a transient state and the user
+    attempted to use the placeholder before it was bound to the final
+    instance.
+    """
+
+
+class PartialConstructionError(WiringError):
+    """Raised when partial construction cannot be completed successfully.
+
+    Examples include factories that bypass `__new__` and return a different
+    instance than the skeleton allocated by the wiring system.
+    """
+
+
 class LockUnavailableError(RuntimeError):
     """Exception raised when a per-attribute lock cannot be acquired in
     optimistic (non-blocking) mode and the code must fall back to a global

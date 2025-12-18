@@ -19,6 +19,7 @@ from apywire.constants import (
     SYNTHETIC_CONST,
 )
 from apywire.wiring import (
+    Spec,
     WiringBase,
     _ConstantValue,
     _ResolvedSpecMapping,
@@ -39,6 +40,31 @@ _PROPERTY_ARGS = ast.arguments(
 
 class WiringCompiler(WiringBase):
     """Wiring container with compilation support."""
+
+    # Explicit attribute added for type checkers
+    allow_partial: bool
+    """Wiring container with compilation support."""
+
+    def __init__(
+        self,
+        spec: Spec,
+        *,
+        thread_safe: bool = False,
+        allow_partial: bool = False,
+    ) -> None:
+        """Initialize compiler with optional partial-construction support.
+
+        Args:
+            spec: wiring spec
+            thread_safe: pack thread-safe behavior into generated code
+            allow_partial: If True, the generated code will use a small helper
+                module to support partial-construction placeholders for
+                circular dependencies.
+        """
+        super().__init__(
+            spec, thread_safe=thread_safe, allow_partial=allow_partial
+        )
+        self.allow_partial = allow_partial
 
     def _astify(self, obj: _ResolvedValue, aio: bool = False) -> ast.expr:
         """Convert a Python object (possibly a `_WiredRef`) to AST.
@@ -358,6 +384,32 @@ class WiringCompiler(WiringBase):
 
         call = ast.Call(func=module_attr, args=args, keywords=kwargs)
 
+        # If enabled, wrap the call in a helper that preserves partial
+        # construction semantics for compiled code.
+        if self.allow_partial:
+            helper_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="apywire.partial", ctx=ast.Load()),
+                    attr="_compiled_instantiate_with_partial",
+                    ctx=ast.Load(),
+                ),
+                args=[
+                    ast.Name(id="self", ctx=ast.Load()),
+                    ast.Constant(value=name),
+                    self._create_lambda_function(call),
+                    ast.Attribute(
+                        value=ast.Name(id=module_name, ctx=ast.Load()),
+                        attr=class_name,
+                        ctx=ast.Load(),
+                    ),
+                    ast.Constant(value=bool(factory_method)),
+                ],
+                keywords=[],
+            )
+            inst_expr = helper_call
+        else:
+            inst_expr = call
+
         cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
 
         # Create reusable components
@@ -366,10 +418,10 @@ class WiringCompiler(WiringBase):
         # Build the assignment that sets the cache value; different
         # behavior is required for async vs sync callers.
         if not aio:
-            assign_cache = self._create_cache_assignment(cache_attr, call)
+            assign_cache = self._create_cache_assignment(cache_attr, inst_expr)
         else:
             # Async path: compute local values and call in executor.
-            lambda_expr = self._create_lambda_function(call)
+            lambda_expr = self._create_lambda_function(inst_expr)
             pre_statements.append(self._create_loop_assignment())
             run_call = self._create_executor_call(lambda_expr)
             assign_cache = self._create_cache_assignment(cache_attr, run_call)
@@ -384,7 +436,7 @@ class WiringCompiler(WiringBase):
             )
         elif not aio and thread_safe:
             # Build sync thread-safe version using helper mixin
-            maker = self._create_lambda_function(call)
+            maker = self._create_lambda_function(inst_expr)
             call_inst = ast.Call(
                 func=ast.Attribute(
                     value=ast.Name(id="self", ctx=ast.Load()),
@@ -610,6 +662,11 @@ class WiringCompiler(WiringBase):
             # When compiling thread_safe, import thread-safety primitives
             modules.add("apywire.threads")
             modules.add("apywire.exceptions")
+        # If compiler is configured to support partial construction, ensure
+        # runtime helper is available in generated module.
+        if self.allow_partial:
+            modules.add("apywire.partial")
+            modules.add("apywire.exceptions")
         for module in sorted(modules):
             if module == "apywire.threads":
                 # Import ThreadSafeMixin from threads
@@ -633,15 +690,21 @@ class WiringCompiler(WiringBase):
                         level=0,
                     )
                 )
+            elif module == "apywire.partial":
+                # Import partial helper module used by compiled code
+                imp = ast.Import(names=[ast.alias(name="apywire.partial")])
+                body.append(imp)
             else:
                 body.append(ast.Import(names=[ast.alias(name=module)]))
 
         # Build class body
         class_body: list[ast.stmt] = []
-        # When thread safe, add __init__ that calls helper mixin init
+        # Add __init__ if needed to support thread-safety init and/or
+        # partial-construction flag propagation.
+        init_body: list[ast.stmt] = []
+        needs_init = False
         if thread_safe:
-            # class __init__
-            init_body: list[ast.stmt] = []
+            needs_init = True
             # compiled class will inherit from the mixin and just call
             # `_init_thread_safety` from its constructor
             init_body.append(
@@ -657,6 +720,22 @@ class WiringCompiler(WiringBase):
                     ),
                 )
             )
+        if self.allow_partial:
+            needs_init = True
+            # Set instance flag so compiled container behaves like runtime
+            init_body.append(
+                ast.Assign(
+                    targets=[
+                        ast.Attribute(
+                            value=ast.Name(id="self", ctx=ast.Load()),
+                            attr="allow_partial",
+                            ctx=ast.Store(),
+                        )
+                    ],
+                    value=ast.Constant(value=True),
+                )
+            )
+        if needs_init:
             init_def = ast.FunctionDef(
                 name="__init__",
                 args=_PROPERTY_ARGS,

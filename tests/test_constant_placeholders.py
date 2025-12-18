@@ -95,7 +95,7 @@ def test_circular_dependency_in_constants() -> None:
     with pytest.raises(apywire.CircularWiringError) as exc_info:
         apywire.Wiring(spec, thread_safe=False)
 
-    assert "Circular dependency detected in constants" in str(exc_info.value)
+    assert "Circular wiring dependency detected" in str(exc_info.value)
 
 
 def test_circular_with_wired_objects() -> None:
@@ -115,11 +115,9 @@ def test_circular_with_wired_objects() -> None:
             "test_module.MyClass a": {"dep": "{b}"},
             "test_module.MyClass b": {"dep": "{a}"},
         }
-        wired = apywire.Wiring(spec, thread_safe=False)
-
-        # Should raise when accessed, not at init
+        # Should raise at init time now (no lazy access errors)
         with pytest.raises(apywire.CircularWiringError):
-            wired.a()
+            apywire.Wiring(spec, thread_safe=False)
     finally:
         del sys.modules["test_module"]
 

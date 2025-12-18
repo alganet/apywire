@@ -4,13 +4,48 @@
 
 import threading
 import time
-from typing import cast
+from typing import Protocol, cast
 from unittest.mock import MagicMock
 
 import pytest
 
+import apywire
 from apywire.exceptions import LockUnavailableError, WiringError
 from apywire.threads import ThreadSafeMixin
+
+
+class CycleModule(Protocol):
+    """Protocol for cyclemod module."""
+
+    A: type
+    B: type
+
+
+class FactoryModule(Protocol):
+    """Protocol for factorymod module."""
+
+    A: type
+    B: type
+
+
+class BadFactoryModule(Protocol):
+    """Protocol for badfactorymod module."""
+
+    Bad: type
+
+
+class ClassWithDep(Protocol):
+    """Protocol for classes with a dep attribute."""
+
+    dep: object
+    a: object
+    b: object
+
+
+class ClassWithRef(Protocol):
+    """Protocol for classes with a ref attribute."""
+
+    ref: object
 
 
 class MockContainer(ThreadSafeMixin):
@@ -402,7 +437,143 @@ def test_instantiate_attr_global_race_cache_hit() -> None:
     result = container._instantiate_attr("race_global", maker)
     assert result == "race_global_won"
     maker.assert_not_called()
+
     t.join()
+
+
+def test_runtime_identity_preserved_for_classes() -> None:
+    """Test that skeleton placeholders preserve identity for class cycles."""
+    import sys
+    import types
+
+    class CycleModuleImpl(types.ModuleType):
+        A: type
+        B: type
+
+    mod = CycleModuleImpl("cyclemod")
+
+    class A:
+        def __init__(self, b: object | None = None) -> None:
+            # store the reference to observe identity
+            self.b = b
+
+    class B:
+        def __init__(self, a: object | None = None) -> None:
+            self.a = a
+
+    mod.A = A
+    mod.B = B
+    sys.modules["cyclemod"] = mod
+
+    from apywire import Wiring
+
+    spec: apywire.Spec = {
+        "cyclemod.A a": {"b": "{b}"},
+        "cyclemod.B b": {"a": "{a}"},
+    }
+
+    wired = Wiring(spec, allow_partial=True)
+
+    a = cast(ClassWithDep, wired.a())
+    b = cast(ClassWithDep, wired.b())
+
+    assert a.b is b
+    assert b.a is a
+
+
+def test_factory_identity_preserved_with_temporary_new_override() -> None:
+    """Test that factory-based cycles preserve identity via
+    a temporary __new__ override.
+    """
+    import sys
+    import types
+
+    class FactoryModuleImpl(types.ModuleType):
+        A: type
+        B: type
+
+    mod = FactoryModuleImpl("factorymod")
+
+    class A:
+        def __init__(self, dep: object = None) -> None:
+            self.dep = dep
+
+        @classmethod
+        def create(cls, dep: object = None) -> object:
+            return cls(dep)
+
+    class B:
+        def __init__(self, dep: object = None) -> None:
+            self.dep = dep
+
+        @classmethod
+        def create(cls, dep: object = None) -> object:
+            return cls(dep)
+
+    mod.A = A
+    mod.B = B
+    sys.modules["factorymod"] = mod
+
+    from apywire import Wiring
+
+    spec: apywire.Spec = {
+        "factorymod.A a.create": {"dep": "{b}"},
+        "factorymod.B b.create": {"dep": "{a}"},
+    }
+
+    wired = Wiring(spec, allow_partial=True)
+
+    a = cast(ClassWithDep, wired.a())
+    b = cast(ClassWithDep, wired.b())
+
+    assert a.dep is b
+    assert b.dep is a
+
+
+def test_factory_violation_removes_skeleton_and_raises() -> None:
+    """If factory bypasses __new__ and returns a different object, error and
+    cleanup."""
+    import sys
+    import types
+
+    class BadFactoryModuleImpl(types.ModuleType):
+        Bad: type
+
+    mod = BadFactoryModuleImpl("badfactorymod")
+
+    class Bad:
+        def __init__(self, ref: object | None = None) -> None:
+            self.ref = ref
+
+        @classmethod
+        def create(cls, ref: object | None = None) -> object:
+            # Bypass normal instantiation: return a new unrelated object
+            return object()
+
+    mod.Bad = Bad
+    sys.modules["badfactorymod"] = mod
+
+    from apywire import Wiring
+    from apywire.exceptions import PartialConstructionError
+
+    spec: apywire.Spec = {
+        "badfactorymod.Bad bad.create": {"ref": "{other}"},
+        "badfactorymod.Bad other": {"ref": "{bad}"},
+    }
+
+    wired = Wiring(spec, allow_partial=True)
+
+    with pytest.raises(PartialConstructionError):
+        wired.bad()
+
+    # Ensure skeleton removed from cache
+    if "bad" in wired._values:
+        bad_cached = wired._values["bad"]
+        # Check that skeleton is no longer marked as partial
+        partial_status = cast(
+            bool, getattr(bad_cached, "_apywire_partial", True)
+        )
+        assert partial_status is False
 
 
 def test_instantiate_attr_global_exception() -> None:

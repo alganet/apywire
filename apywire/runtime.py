@@ -10,13 +10,15 @@ from __future__ import annotations
 import asyncio
 import importlib
 import re
+import threading
 from functools import cached_property
 from operator import itemgetter
-from typing import Awaitable, Callable, Protocol, cast, final
+from typing import Awaitable, Callable, Optional, Protocol, cast, final
 
 from apywire.constants import PLACEHOLDER_REGEX, SYNTHETIC_CONST
 from apywire.exceptions import (
     CircularWiringError,
+    PartialConstructionError,
     UnknownPlaceholderError,
     WiringError,
 )
@@ -64,6 +66,7 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         thread_safe: bool = False,
         max_lock_attempts: int = 10,
         lock_retry_sleep: float = 0.01,
+        allow_partial: bool = False,
     ) -> None:
         """Initialize a WiringRuntime container.
 
@@ -80,7 +83,10 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
             thread_safe=thread_safe,
             max_lock_attempts=max_lock_attempts,
             lock_retry_sleep=lock_retry_sleep,
+            allow_partial=allow_partial,
         )
+        # Retain allow_partial attribute for clarity
+        self.allow_partial = allow_partial
         if self._thread_safe:
             self._init_thread_safety(max_lock_attempts, lock_retry_sleep)
 
@@ -100,9 +106,80 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
             return ThreadSafeMixin._get_resolving_stack(self)
         return self._resolving_stack
 
+    def _skeletonize_type(self, cls: _Constructor) -> object:
+        """Allocate a skeleton instance for the given class-like constructor.
+
+        The skeleton is created via cls.__new__(cls) and marked as partial.
+        We attach a threading.Event to allow other threads to wait for
+        finalization.
+        """
+        try:
+            # The call to __new__ can confuse the type checker; narrow via cast
+            skeleton: object = cast(
+                object, cls.__new__(cls)  # type: ignore[arg-type]
+            )
+        except Exception as e:
+            raise PartialConstructionError(
+                f"failed to allocate skeleton for {cls}: {e}"
+            ) from e
+        # Mark skeleton as partial and attach sync primitives
+        try:
+            setattr(skeleton, "_apywire_partial", True)
+            setattr(skeleton, "_apywire_event", threading.Event())
+            setattr(skeleton, "_apywire_failure", None)
+        except Exception:
+            # If we cannot attach markers, treat as not skeletonizable
+            raise PartialConstructionError(
+                f"type {cls} cannot be skeletonized"
+            )
+        return skeleton
+
+    def _finalize_skeleton(
+        self, skeleton: object, exc: Exception | None = None
+    ) -> None:  # pragma: no cover - defensive notification only
+        """Finalize or fail a previously allocated skeleton.
+
+        If exc is None, the skeleton is marked finalized and waiters are
+        notified. Otherwise, the failure is recorded and waiters are
+        notified before cleanup is performed by the caller.
+        """
+        if exc is not None:
+            try:
+                setattr(skeleton, "_apywire_failure", exc)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        try:
+            setattr(skeleton, "_apywire_partial", False)
+            event = cast(
+                Optional[threading.Event],
+                getattr(skeleton, "_apywire_event", None),
+            )
+            if event is not None:
+                try:
+                    event.set()
+                except Exception:  # pragma: no cover - defensive
+                    pass
+        except Exception:  # pragma: no cover - defensive
+            # Best-effort: ignore finalization errors
+            pass
+
+    def _cleanup_skeleton(
+        self, name: str, skeleton: object, exc: Exception | None = None
+    ) -> None:
+        """Finalize skeleton, record failure and remove it from cache.
+
+        This is a convenience helper to centralize the cleanup policy used
+        when partial construction fails or a factory violates expectations.
+        """
+        try:
+            self._finalize_skeleton(skeleton, exc)
+        finally:
+            if name in self._values and self._values[name] is skeleton:
+                del self._values[name]
+
     def __getattr__(self, name: str) -> Accessor:
         """Return a callable accessor for the named wired object."""
-        # If the name is in our parsed spec or constants, return an accessor.
+        # Return accessor for known names
         if name in self._parsed or name in self._values:
             return Accessor(self, name)
         raise AttributeError(
@@ -188,11 +265,45 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         # Check for circular dependencies
         stack = self._get_resolving_stack()
         if name in stack:
-            raise CircularWiringError(
-                f"Circular wiring dependency detected: "
-                f"{' -> '.join(stack)} -> {name}"
-            )
+            # Opt-in partial construction: allocate a skeleton placeholder
+            if not self.allow_partial:
+                msg = (
+                    "Circular wiring dependency detected: "
+                    + " -> ".join(stack)
+                    + " -> "
+                    + name
+                )
+                raise CircularWiringError(msg)
 
+            # Create and cache a skeleton placeholder for the declared type
+            if name in self._parsed:
+                entry = self._parsed[name]
+                # Only class-like types can be skeletonized
+                if (
+                    entry.module_name == SYNTHETIC_CONST
+                    and entry.class_name == "str"
+                ):
+                    raise CircularWiringError(
+                        "Circular wiring dependency detected while resolving "
+                        + repr(name)
+                    )
+                module = importlib.import_module(entry.module_name)
+                cls = cast(_Constructor, getattr(module, entry.class_name))
+                skeleton = self._skeletonize_type(cls)
+                # Insert into cache. Use _set_cache if provided for
+                # thread-safe paths.
+                if hasattr(self, "_set_cache"):
+                    self._set_cache(name, skeleton)
+                else:
+                    self._values[name] = skeleton
+                return skeleton
+            # Fallback: no parsed entry - raise as before
+            raise CircularWiringError(
+                (
+                    "Circular wiring dependency detected while resolving "
+                    + repr(name)
+                )
+            )
         stack.append(name)
         try:
             if name in self._values:
@@ -231,21 +342,100 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
             # Resolve arguments
             kwargs = self._resolve_runtime(entry.data, context=name)
 
-            try:
-                if isinstance(kwargs, dict):
-                    # Separate positional args (int keys) from keyword args
-                    # (str keys)
-                    pos_args, kwargs_dict = self._separate_args_kwargs(kwargs)
+            # Separate positional args (int keys) from keyword args
+            # (str keys) if we received a dict of parameters
+            if isinstance(kwargs, dict):
+                pos_args, kwargs_dict = self._separate_args_kwargs(kwargs)
+            elif isinstance(kwargs, list):
+                pos_args = kwargs
+                kwargs_dict = {}
+            else:
+                pos_args = [kwargs]
+                kwargs_dict = {}
+
+            # Check if a skeleton placeholder was previously inserted for this
+            # name (due to an inner circular reference). If present and still
+            # partial, bind or initialize it instead of creating a new object.
+            values = cast(
+                Optional[dict[str, object]], getattr(self, "_values", None)
+            )
+            if values is not None:
+                cached = values.get(name)
+            else:
+                cached = None
+            if cached is not None and cast(
+                bool, getattr(cached, "_apywire_partial", False)
+            ):
+                skeleton = cached
+                try:
+                    if entry.factory_method:
+                        # Temporarily override cls.__new__ to return skeleton
+                        orig_new = cast(object, getattr(cls, "__new__", None))
+
+                        def _tmp_new(
+                            _cls: type, *a: object, **k: object
+                        ) -> object:
+                            return skeleton
+
+                        setattr(cls, "__new__", _tmp_new)
+                        try:
+                            ret = constructor(*pos_args, **kwargs_dict)
+                        finally:
+                            # Restore original __new__
+                            if orig_new is None:
+                                try:
+                                    delattr(cls, "__new__")
+                                except Exception:
+                                    pass
+                            else:
+                                try:
+                                    setattr(cls, "__new__", orig_new)
+                                except Exception:
+                                    pass
+
+                        if ret is not skeleton:
+                            exc = PartialConstructionError(
+                                "factory for %r returned a different instance "
+                                "than the skeleton" % (name,)
+                            )
+                            self._cleanup_skeleton(name, skeleton, exc)
+                            raise exc
+
+                        # Success: finalize skeleton
+                        self._finalize_skeleton(skeleton, None)
+                        instance = skeleton
+                    else:
+                        # Direct class initialization on the skeleton
+                        try:
+                            cast(object, cls).__init__(  # type: ignore[misc]
+                                skeleton, *pos_args, **kwargs_dict
+                            )
+                        except Exception as e:
+                            exc = PartialConstructionError(
+                                "failed to initialize skeleton for %r: %s"
+                                % (name, e)
+                            )
+                            self._cleanup_skeleton(name, skeleton, exc)
+                            raise exc from e
+                        # Finalize on success
+                        self._finalize_skeleton(skeleton, None)
+                        instance = skeleton
+                except PartialConstructionError:
+                    raise
+                except Exception as e:
+                    exc = PartialConstructionError(
+                        "partial construction failed for %r: %s" % (name, e)
+                    )
+                    self._cleanup_skeleton(name, skeleton, exc)
+                    raise exc from e
+            else:
+                # No skeleton present; normal instantiation
+                try:
                     instance = constructor(*pos_args, **kwargs_dict)
-                elif isinstance(kwargs, list):
-                    # All positional arguments
-                    instance = constructor(*kwargs)
-                else:
-                    instance = constructor(kwargs)
-            except Exception as e:
-                raise WiringError(
-                    f"failed to instantiate '{name}': {e}"
-                ) from e
+                except Exception as e:
+                    raise WiringError(
+                        f"failed to instantiate '{name}': {e}"
+                    ) from e
 
             return instance
         finally:
@@ -344,7 +534,21 @@ class Accessor:
         # Fast path: EAFP pattern for cache lookup
         # Try to get cached value directly (faster than check + get)
         try:
-            return self._wiring._values[self._name]
+            val = self._wiring._values[self._name]
+            # If this is a partial skeleton, wait for finalization
+            if cast(bool, getattr(val, "_apywire_partial", False)):
+                event = cast(
+                    Optional[threading.Event],
+                    getattr(val, "_apywire_event", None),
+                )
+                if event is not None:
+                    event.wait()
+                failure = cast(
+                    Optional[Exception], getattr(val, "_apywire_failure", None)
+                )
+                if failure is not None:
+                    raise failure
+            return val
         except KeyError:
             pass
 
@@ -370,20 +574,36 @@ class AioAccessor:
             and name not in self._wiring._values
         ):
             raise AttributeError(
-                f"'{type(self._wiring).__name__}' object has no attribute "
-                f"'{name}'"
+                "'%s' object has no attribute %r"
+                % (type(self._wiring).__name__, name)
             )
 
         async def _get() -> object:
             # EAFP: Try cached value first
+            loop = asyncio.get_running_loop()
             try:
-                return self._wiring._values[name]
+                val = self._wiring._values[name]
+                if cast(bool, getattr(val, "_apywire_partial", False)):
+                    event = cast(
+                        Optional[threading.Event],
+                        getattr(val, "_apywire_event", None),
+                    )
+                    if event is not None:
+                        # Run blocking wait in executor to avoid
+                        # blocking the event loop
+                        await loop.run_in_executor(None, event.wait)
+                    failure = cast(
+                        Optional[Exception],
+                        getattr(val, "_apywire_failure", None),
+                    )
+                    if failure is not None:
+                        raise failure
+                return val
             except KeyError:
                 pass
 
             # If not cached, run instantiation in executor to avoid blocking
             # the event loop.
-            loop = asyncio.get_running_loop()
             return await loop.run_in_executor(
                 None,
                 lambda: self._wiring._instantiate_attr(
