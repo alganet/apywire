@@ -28,7 +28,7 @@ Objects are instantiated only when accessed, using `__getattr__` to intercept at
 Strings like `{name}` in spec values are converted to `_WiredRef` markers during parsing, then resolved to actual objects at instantiation time. See `constants.py` for delimiter patterns.
 
 **Thread Safety Model:**
-Uses optimistic per-attribute locking (`dict[str, threading.Lock]`) with a global fallback lock. Thread-local state tracks the resolving stack for circular dependency detection. See `threads.py` for `ThreadSafeMixin` implementation.
+Uses optimistic per-attribute locking (`dict[str, threading.Lock]`) with a global fallback lock. Thread-local state stores lock-related per-thread state (mode and held locks) used by the `ThreadSafeMixin`; see `threads.py` for implementation details.
 
 **Compilation Equivalence:**
 Generated code must behave identically to runtime `Wiring`. The compiler generates accessor methods that replicate lazy loading, caching, and optional async/thread-safe behavior.

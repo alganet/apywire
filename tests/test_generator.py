@@ -570,26 +570,26 @@ def test_generate_non_constant_default() -> None:
 
 
 def test_is_constant_with_collections() -> None:
-    """Test _is_constant with various collection types."""
+    """Test _is_spec_constant with various collection types."""
     from apywire.generator import Generator
 
     # Test nested lists and dicts
-    assert Generator._is_constant([1, 2, 3])
-    assert Generator._is_constant({"a": 1, "b": 2})
-    assert Generator._is_constant([1, [2, 3]])
-    assert Generator._is_constant({"a": {"b": 1}})
-    assert Generator._is_constant((1, 2, 3))
+    assert Generator._is_spec_constant([1, 2, 3])
+    assert Generator._is_spec_constant({"a": 1, "b": 2})
+    assert Generator._is_spec_constant([1, [2, 3]])
+    assert Generator._is_spec_constant({"a": {"b": 1}})
+    assert Generator._is_spec_constant((1, 2, 3))
 
     # Test with non-constants
     class Obj:
         pass
 
-    assert not Generator._is_constant(Obj())
-    assert not Generator._is_constant([Obj()])
-    assert not Generator._is_constant({"key": Obj()})
+    assert not Generator._is_spec_constant(Obj())
+    assert not Generator._is_spec_constant([Obj()])
+    assert not Generator._is_spec_constant({"key": Obj()})
 
     # Test ellipsis
-    assert Generator._is_constant(...)
+    assert Generator._is_spec_constant(...)
 
 
 def test_generate_dependency_with_missing_module() -> None:
@@ -627,9 +627,12 @@ def test_generate_dependency_with_missing_module() -> None:
 
 
 def test_generate_actual_circular_dependency() -> None:
-    """Test that actual circular dependency raises error."""
-    from apywire.exceptions import CircularWiringError
+    """Test that circular dependency stops recursion silently.
 
+    The generator now returns immediately when a cycle is detected,
+    rather than raising an error. This allows partial specs to be
+    generated, with the runtime container handling cycle detection.
+    """
     # Manually create a spec with visited tracking
     spec: Spec = {}
     visited: set[str] = {"mockmod_circ.Node root"}
@@ -650,10 +653,10 @@ def test_generate_actual_circular_dependency() -> None:
         # Try to process entry that's already in visited
         from apywire.generator import Generator
 
+        # Should return silently (no error) when cycle detected
         Generator._process_entry("mockmod_circ.Node root", spec, visited)
-        assert False, "Should have raised CircularWiringError"
-    except CircularWiringError as e:
-        assert "Circular dependency detected" in str(e)
+        # Spec should be empty since we returned early
+        assert spec == {}
     finally:
         if "mockmod_circ" in sys.modules:
             del sys.modules["mockmod_circ"]

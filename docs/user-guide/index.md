@@ -73,7 +73,7 @@ Looking for something specific?
 1. Define test-specific specs with mock objects
 2. Use placeholder references to inject test doubles
 3. Leverage lazy loading to avoid unnecessary instantiation
-4. Test circular dependency error handling
+4. Test circular dependency behavior — see [Circular dependencies](user-guide/circular-dependencies.md)
 
 ## Best Practices
 

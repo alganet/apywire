@@ -125,7 +125,7 @@ Base exception class for all apywire errors.
     options:
       show_source: false
 
-Raised when a circular dependency is detected:
+Raised when a circular dependency is detected; see [Circular dependencies](user-guide/circular-dependencies.md) for examples and mitigation strategies:
 
 ```python
 from apywire import CircularWiringError, Wiring
@@ -135,9 +135,8 @@ spec = {
     "MyClass b": {"dep": "{a}"},
 }
 
-wired = Wiring(spec)
 try:
-    obj = wired.a()
+    wired = Wiring(spec)
 except CircularWiringError as e:
     print(f"Circular dependency: {e}")
 ```

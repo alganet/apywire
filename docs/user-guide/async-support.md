@@ -256,7 +256,7 @@ async def main():
 
 ## Error Handling
 
-Async access raises the same exceptions as sync access:
+Async access raises the same exceptions as sync access; see [Circular dependencies](user-guide/circular-dependencies.md) for details on `CircularWiringError`.
 
 ```python
 from apywire import UnknownPlaceholderError, CircularWiringError

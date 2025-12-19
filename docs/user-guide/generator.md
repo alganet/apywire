@@ -86,8 +86,6 @@ expected_spec = {
 - Non-constant parameter defaults (e.g. object instances) fall back to type defaults.
 - Dependencies (constructor parameters typed as another class) are generated
   recursively as separate spec entries, unless importing the dependency fails.
-- Circular dependencies may raise `apywire.CircularWiringError` or generate partial
-  specs (tests consider both outcomes acceptable).
 - Built-in types or types whose signatures cannot be inspected may result in an
   empty `{}` entry for that wiring key.
 
@@ -222,7 +220,6 @@ Returns:
 
 Raises:
 - `ValueError` for invalid entry strings (e.g., missing delimiter or module)
-- `apywire.exceptions.CircularWiringError` when a cycle is detected
 
 ## Notes and Limitations
 

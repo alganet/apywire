@@ -280,22 +280,9 @@ except UnknownPlaceholderError as e:
     print(f"Unknown placeholder: {e}")
 ```
 
-### Circular Dependencies
+### Circular dependencies
 
-```python
-from apywire import Wiring, CircularWiringError
-
-spec = {
-    "MyClass a": {"dep": "{b}"},
-    "MyClass b": {"dep": "{a}"},
-}
-
-wired = Wiring(spec)
-try:
-    obj = wired.a()
-except CircularWiringError as e:
-    print(f"Circular dependency: {e}")
-```
+See [Circular dependencies](user-guide/circular-dependencies.md) for examples, expected exceptions, and advice to avoid cycles.
 
 ### Import Errors
 

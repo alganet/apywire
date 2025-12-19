@@ -23,14 +23,12 @@ class _ThreadLocalState(threading.local):
     """Thread-local storage for wiring resolution state.
 
     Provides typed attributes initialized per-thread:
-    - resolving_stack: Stack for circular dependency detection
     - mode: Current instantiation mode ('optimistic', 'global', or None)
     - held_locks: Locks held by this thread
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self.resolving_stack: list[str] = []
         self.mode: Literal["optimistic", "global"] | None = None
         self.held_locks: list[threading.RLock] = []
 
@@ -70,9 +68,6 @@ class ThreadSafeMixin:
             if name not in self._attr_locks:
                 self._attr_locks[name] = threading.RLock()
             return self._attr_locks[name]
-
-    def _get_resolving_stack(self) -> list[str]:
-        return self._local.resolving_stack
 
     def _get_held_locks(self) -> list[threading.RLock]:
         return self._local.held_locks
@@ -121,12 +116,11 @@ class ThreadSafeMixin:
         This method always raises an exception and never returns.
         """
         from apywire.exceptions import (
-            CircularWiringError,
             UnknownPlaceholderError,
             WiringError,
         )
 
-        if isinstance(e, (UnknownPlaceholderError, CircularWiringError)):
+        if isinstance(e, UnknownPlaceholderError):
             raise
         # All other exceptions (including WiringError) are wrapped
         raise WiringError(f"failed to instantiate '{name}'") from e

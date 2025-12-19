@@ -223,7 +223,7 @@ At instantiation time, `_WiredRef` markers are resolved to actual objects.
 Thread-safe mode uses:
 1. **Per-attribute locks**: `dict[str, threading.Lock]`
 2. **Global fallback lock**: Single `threading.Lock`
-3. **Thread-local state**: For circular dependency detection
+3. **Thread-local state**: For lock-related per-thread state used by the thread-safety mixin (mode, held locks)
 
 See `apywire/threads.py` for details.
 

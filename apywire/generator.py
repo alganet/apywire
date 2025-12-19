@@ -23,11 +23,9 @@ from typing import (
 from apywire.constants import (
     PLACEHOLDER_END,
     PLACEHOLDER_START,
-    SPEC_KEY_DELIMITER,
 )
-from apywire.exceptions import CircularWiringError
 from apywire.runtime import _Constructor
-from apywire.wiring import Spec, _ConstantValue, _SpecMapping
+from apywire.wiring import Spec, SpecParser, _ConstantValue, _SpecMapping
 
 # Parameter sentinel values
 _PARAM_EMPTY: object = inspect.Parameter.empty  # type: ignore[misc]
@@ -37,7 +35,7 @@ _VAR_POSITIONAL: object = (
 _VAR_KEYWORD: object = inspect.Parameter.VAR_KEYWORD  # type: ignore[misc]
 
 
-class Generator:
+class Generator(SpecParser):
     """Generates apywire specs from class introspection.
 
     This class inspects class constructors to automatically generate
@@ -73,7 +71,6 @@ class Generator:
 
         Raises:
             ValueError: If entry format is invalid
-            CircularWiringError: If circular dependencies detected
 
         Example:
             >>> spec = Generator.generate("datetime.datetime now")
@@ -96,9 +93,13 @@ class Generator:
             spec: Spec dict to populate
             visited: Set of already-visited class keys to detect cycles
         """
-        module_name, class_name, instance_name, factory_method = (
-            cls._parse_entry(entry)
-        )
+        parsed = cls._parse_request_string(entry)
+        if parsed is None:
+            raise ValueError(
+                f"Invalid entry format '{entry}': "
+                f"expected 'module.Class name'"
+            )
+        module_name, class_name, instance_name, factory_method = parsed
 
         # Build the spec key
         type_path = f"{module_name}.{class_name}"
@@ -108,9 +109,9 @@ class Generator:
 
         # Check for circular dependency
         if spec_key in visited:
-            raise CircularWiringError(
-                f"Circular dependency detected: '{spec_key}'"
-            )
+            # Cycle detected: stop recursion. The runtime container will
+            # handle the cycle (or raise error) when resolving.
+            return
         visited.add(spec_key)
 
         # Import the class
@@ -136,8 +137,10 @@ class Generator:
                 else:
                     spec[spec_key] = {}
                     return
-        except (ValueError, TypeError):
-            # Some built-in classes don't have inspectable signatures
+        except (ValueError, TypeError, RecursionError):
+            # Some built-in classes (or pathological annotations) don't have
+            # inspectable signatures; fall back to an empty entry to avoid
+            # infinite recursion.
             spec[spec_key] = {}
             return
 
@@ -174,59 +177,12 @@ class Generator:
 
             if not is_dependency:
                 # For non-dependency params, set a constant value
-                if has_default and cls._is_constant(param_default):
+                if has_default and cls._is_spec_constant(param_default):
                     spec[const_name] = cast(_ConstantValue, param_default)
                 else:
                     spec[const_name] = default_value
 
         spec[spec_key] = cast(_SpecMapping, params)
-
-    @classmethod
-    def _parse_entry(cls, entry: str) -> tuple[str, str, str, str | None]:
-        """Parse an entry string into components.
-
-        Args:
-            entry: Entry string like "module.Class name" or
-                   "module.Class name.factoryMethod"
-
-        Returns:
-            Tuple of (module_name, class_name, instance_name, factory_method)
-
-        Raises:
-            ValueError: If entry format is invalid
-        """
-        if SPEC_KEY_DELIMITER not in entry:
-            raise ValueError(
-                f"Invalid entry format '{entry}': "
-                f"expected 'module.Class name'"
-            )
-
-        type_str, name_part = entry.rsplit(SPEC_KEY_DELIMITER, 1)
-        parts = type_str.split(".")
-
-        if len(parts) < 2:
-            raise ValueError(
-                f"Invalid entry format '{entry}': "
-                f"missing module qualification"
-            )
-
-        module_name = ".".join(parts[:-1])
-        class_name = parts[-1]
-
-        # Check for factory method
-        factory_method: str | None = None
-        if "." in name_part:
-            instance_name, factory_method = name_part.split(".", 1)
-        else:
-            instance_name = name_part
-
-        if factory_method and "." in factory_method:
-            raise ValueError(
-                f"invalid generator '{name_part}': nested factory methods "
-                f"are not supported."
-            )
-
-        return module_name, class_name, instance_name, factory_method
 
     @classmethod
     def _get_default_for_type(
@@ -338,33 +294,10 @@ class Generator:
 
         # Recursively process (will add to spec)
         try:
-            cls._process_entry(entry, spec, visited.copy())
-        except (CircularWiringError, AttributeError, ModuleNotFoundError):
-            # If circular or can't find module, just reference it
+            # Propagate the same visited set so that cycles are detected
+            cls._process_entry(entry, spec, visited)
+        except (AttributeError, ModuleNotFoundError):
+            # If can't find module, just reference it
             pass
 
         return None, True
-
-    @classmethod
-    def _is_constant(cls, value: object) -> bool:
-        """Check if a value is a valid constant for a spec.
-
-        Args:
-            value: Value to check
-
-        Returns:
-            True if value can be stored as a spec constant
-        """
-        if value is None or value is ...:
-            return True
-        if isinstance(value, (str, bytes, bool, int, float, complex)):
-            return True
-        if isinstance(value, (list, tuple, dict)):
-            # Check contents recursively
-            if isinstance(value, dict):
-                return all(
-                    cls._is_constant(k) and cls._is_constant(v)
-                    for k, v in value.items()
-                )
-            return all(cls._is_constant(v) for v in value)
-        return False

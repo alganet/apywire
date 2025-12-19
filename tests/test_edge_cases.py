@@ -30,10 +30,6 @@ def test_thread_safety_init_and_helpers() -> None:
     """Test initialization and basic helpers of ThreadSafeMixin."""
     container = MockContainer()
 
-    # Test _get_resolving_stack initialization
-    assert container._get_resolving_stack() == []
-    assert container._get_resolving_stack() is container._get_resolving_stack()
-
     # Test _get_held_locks initialization
     assert container._get_held_locks() == []
     assert container._get_held_locks() is container._get_held_locks()
@@ -203,18 +199,6 @@ def test_wiring_aio_lazy_init() -> None:
     aio = wired.aio
     # Verify same object is returned (caching works)
     assert wired.aio is aio
-
-
-def test_wiring_resolving_stack_non_thread_safe() -> None:
-    """Test resolving stack initialization in non-thread-safe mode."""
-    from apywire import Wiring
-
-    wired = Wiring({}, thread_safe=False)
-    # It IS initialized in __init__ for non-thread-safe mode
-    assert hasattr(wired, "_resolving_stack")
-    stack = wired._get_resolving_stack()
-    assert stack == []
-    assert wired._get_resolving_stack() is stack
 
 
 def test_compile_constant_aio() -> None:
