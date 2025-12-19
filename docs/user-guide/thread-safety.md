@@ -247,18 +247,7 @@ The generated code will include the same two-level locking mechanism.
 
 ## Thread-Local State
 
-apywire uses thread-local storage to track the resolution stack for circular dependency detection:
-
-```python
-# Under the hood
-import threading
-
-class _ThreadLocalState(threading.local):
-    def __init__(self):
-        self.resolving: list[str] = []
-```
-
-This ensures circular dependency detection works correctly across threads without interference.
+apywire uses thread-local storage to keep lock-related per-thread state used by the thread-safety mixin (for example: the current locking `mode` and the list of `held_locks`). This keeps per-thread locking context isolated and prevents cross-thread interference. See `apywire/threads.py` for the concrete implementation.
 
 ## Testing Thread Safety
 

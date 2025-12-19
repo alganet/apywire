@@ -649,14 +649,11 @@ def test_circular_reference_raises() -> None:
             "mymod_circ.A a": {"b": "{b}"},
             "mymod_circ.B b": {"a": "{a}"},
         }
-        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
         try:
-            _ = wired.a()
-            assert (
-                False
-            ), "Should have raised CircularWiringError for circular dependency"
+            apywire.Wiring(spec, thread_safe=False)
+            assert False, "Should have raised CircularWiringError at init"
         except apywire.CircularWiringError as e:
-            assert "Circular wiring dependency detected" in str(e)
+            assert "Circular dependency detected" in str(e)
     finally:
         if "mymod_circ" in sys.modules:
             del sys.modules["mymod_circ"]

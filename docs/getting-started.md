@@ -150,23 +150,6 @@ When you access a wired object:
 4. Instantiates the object with the resolved parameters
 5. Caches it for future access
 
-### 5. Circular Dependency Detection
-
-apywire automatically detects circular dependencies:
-
-```python
-spec = {
-    "MyClass a": {"dependency": "{b}"},
-    "MyClass b": {"dependency": "{a}"},  # Circular!
-}
-
-wired = Wiring(spec)
-try:
-    obj = wired.a()
-except CircularWiringError as e:
-    print(f"Circular dependency detected: {e}")
-```
-
 ## Next Steps
 
 Now that you understand the basics, explore more advanced features:

@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: ISC
 
 import ast
-import threading
 
 import apywire
 from apywire.wiring import _ResolvedValue, _WiredRef
@@ -61,40 +60,3 @@ def test_astify_tuple_and_fallback_to_constant() -> None:
     # ast.Constant.value is typed as a union of constant types, but we're
     # testing the fallback behavior, so we cast to object for the check
     assert cast(object, const_node.value) is d
-
-
-def test_get_resolving_stack_returns_per_thread_or_shared() -> None:
-    # Non-thread-safe: stacks should be the same across calls and threads
-    w1 = apywire.Wiring({}, thread_safe=False)
-    s1 = w1._get_resolving_stack()
-    s2 = w1._get_resolving_stack()
-    assert s1 is s2
-
-    stack_id_in_thread = None
-
-    def capture_shared_stack_id() -> None:
-        nonlocal stack_id_in_thread
-        stack_id_in_thread = id(w1._get_resolving_stack())
-
-    t = threading.Thread(target=capture_shared_stack_id)
-    t.start()
-    t.join()
-    assert stack_id_in_thread == id(s1)
-
-    # Thread-safe: each thread should get a distinct resolving stack
-    w2 = apywire.Wiring({}, thread_safe=True)
-    st_main = w2._get_resolving_stack()
-    st_main2 = w2._get_resolving_stack()
-    assert st_main is st_main2
-
-    main_stack_id = id(st_main)
-    stack_id_other_thread = None
-
-    def capture_local_stack_id() -> None:
-        nonlocal stack_id_other_thread
-        stack_id_other_thread = id(w2._get_resolving_stack())
-
-    t2 = threading.Thread(target=capture_local_stack_id)
-    t2.start()
-    t2.join()
-    assert stack_id_other_thread != main_stack_id

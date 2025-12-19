@@ -95,7 +95,12 @@ def test_circular_dependency_in_constants() -> None:
     with pytest.raises(apywire.CircularWiringError) as exc_info:
         apywire.Wiring(spec, thread_safe=False)
 
-    assert "Circular dependency detected in constants" in str(exc_info.value)
+    msg = str(exc_info.value)
+    assert "Circular dependency detected" in msg
+    # Ensure the message lists the involved entries
+    assert "a" in msg and "b" in msg
+    # Prefer a readable cycle chain if present
+    assert "->" in msg or "," in msg
 
 
 def test_circular_with_wired_objects() -> None:
@@ -115,11 +120,14 @@ def test_circular_with_wired_objects() -> None:
             "test_module.MyClass a": {"dep": "{b}"},
             "test_module.MyClass b": {"dep": "{a}"},
         }
-        wired = apywire.Wiring(spec, thread_safe=False)
+        # Should raise at init time now
+        with pytest.raises(apywire.CircularWiringError) as exc_info:
+            apywire.Wiring(spec, thread_safe=False)
 
-        # Should raise when accessed, not at init
-        with pytest.raises(apywire.CircularWiringError):
-            wired.a()
+        msg = str(exc_info.value)
+        assert "Circular dependency detected" in msg
+        assert "a" in msg and "b" in msg
+        assert "->" in msg or "," in msg
     finally:
         del sys.modules["test_module"]
 

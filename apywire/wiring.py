@@ -104,7 +104,77 @@ class _UnresolvedParsedEntry(NamedTuple):
     data: _SpecMapping
 
 
-class WiringBase:
+class SpecParser:
+    """Base class for parsing wiring specs."""
+
+    @staticmethod
+    def _parse_request_string(
+        key: str,
+    ) -> tuple[str, str, str, str | None] | None:
+        """Parse a request string into components.
+
+        Args:
+            key: Entry string like "module.Class name" or
+                   "module.Class name.factoryMethod"
+
+        Returns:
+            Tuple of (module_name, class_name, instance_name, factory_method)
+            or None if the key is not a wired object definition
+            (e.g. constant).
+        """
+        if SPEC_KEY_DELIMITER not in key:
+            return None
+
+        type_str, name_part = key.rsplit(SPEC_KEY_DELIMITER, 1)
+        parts = type_str.split(".")
+        module_name = ".".join(parts[:-1])
+        class_name = parts[-1]
+
+        if "." in name_part:
+            name, factory_method = name_part.split(".", 1)
+            if "." in factory_method:
+                raise ValueError(
+                    f"invalid spec key '{key}': nested factory methods "
+                    f"are not supported."
+                )
+        else:
+            name = name_part
+            factory_method = None
+
+        if not module_name:
+            raise ValueError(
+                f"invalid spec key '{key}': missing module qualification"
+            )
+
+        return module_name, class_name, name, factory_method
+
+    @staticmethod
+    def _is_spec_constant(value: object) -> bool:
+        """Check if a value is a valid constant for a spec.
+
+        Args:
+            value: Value to check
+
+        Returns:
+            True if value can be stored as a spec constant
+        """
+        if value is None or value is ...:
+            return True
+        if isinstance(value, (str, bytes, bool, int, float, complex)):
+            return True
+        if isinstance(value, (list, tuple, dict)):
+            # Check contents recursively
+            if isinstance(value, dict):
+                return all(
+                    SpecParser._is_spec_constant(k)
+                    and SpecParser._is_spec_constant(v)
+                    for k, v in value.items()
+                )
+            return all(SpecParser._is_spec_constant(v) for v in value)
+        return False
+
+
+class WiringBase(SpecParser):
     """Base class for wiring containers."""
 
     _parsed: dict[str, _ParsedEntry]
@@ -132,19 +202,44 @@ class WiringBase:
         self._max_lock_attempts = max_lock_attempts
         self._lock_retry_sleep = lock_retry_sleep
 
-        parsed: list[_UnresolvedParsedEntry] = []
-        consts: dict[str, _SpecMapping | _ConstantValue] = {}
+        # Pre-parse all keys to correctly identify dependencies
+        # map: exposed_name -> (is_const, raw_value, parsed_entry_or_none)
+        all_entries: dict[
+            str, tuple[bool, _SpecValue, _UnresolvedParsedEntry | None]
+        ] = {}
 
-        # First pass: classify entries into wired classes or constants
         for key, value in spec.items():
-            entry = self._parse_spec_entry(key, value)
-            if entry is not None:
+            parsed_entry = self._parse_spec_entry(key, value)
+            if parsed_entry:
+                all_entries[parsed_entry.name] = (False, value, parsed_entry)
+            else:
+                all_entries[key] = (True, value, None)
+
+        # Build full dependency graph for early cycle detection
+        full_deps: dict[str, set[str]] = {}
+        for name, (_, entry_val, _) in all_entries.items():
+            deps = self._find_placeholder_names(entry_val)
+            full_deps[name] = deps
+
+        # Detect circular dependencies across ALL entries
+        # This will raise CircularWiringError if a cycle exists.
+        sorted_keys = self._topological_sort(full_deps)
+
+        # Now proceed with separation and processing
+        parsed: list[_UnresolvedParsedEntry] = []
+        consts: dict[str, _SpecValue] = {}
+
+        # Separation based on the pre-parsed results
+        for name in sorted_keys:
+            # keys in sorted_keys are 'exposed names'
+            # we need to find the original entry to process
+            is_const, entry_val, entry = all_entries[name]
+            if not is_const and entry:
                 parsed.append(entry)
             else:
-                # It's a constant
-                consts[key] = value
+                consts[name] = entry_val
 
-        # Parse wired objects first
+        # Parse wired objects
         self._parsed: dict[str, _ParsedEntry] = {
             entry.name: _ParsedEntry(
                 entry.module_name,
@@ -155,33 +250,33 @@ class WiringBase:
             for entry in parsed
         }
 
-        # Classify constants by placeholder type
-        raw_consts: dict[str, _SpecMapping | _ConstantValue] = {}
-        const_with_refs: dict[
-            str, tuple[_SpecMapping | _ConstantValue, set[str]]
-        ] = {}
+        # Handle constants
+        # Classify constants by placeholder type using ALREADY calculated deps
+        raw_consts: dict[str, _SpecValue] = {}
+        const_with_refs: dict[str, tuple[_SpecValue, set[str]]] = {}
 
-        for key, value in consts.items():
-            placeholder_names = self._find_placeholder_names(value)
+        for key, const_val in consts.items():
+            # REUSE full_deps[key] which we already computed!
+            placeholder_names = full_deps[key]
             if not placeholder_names:
-                # No placeholders - store immediately
-                raw_consts[key] = value
+                raw_consts[key] = const_val
             else:
-                # Has placeholders - classify later
-                const_with_refs[key] = (value, placeholder_names)
+                const_with_refs[key] = (const_val, placeholder_names)
 
         # Promote constants to accessors if they reference wired objects:
-        # Transitive: mark direct refs, then propagate to dependents
+        # Transitive promotion logic remains...
         const_deps_graph: dict[str, set[str]] = {
             key: placeholder_names
-            for key, (value, placeholder_names) in const_with_refs.items()
+            for key, (val_entry, placeholder_names) in const_with_refs.items()
         }
-        # Initially, mark constants that directly reference a wired object
+
         to_promote = set()
-        for key, (value, placeholder_names) in const_with_refs.items():
+        # Initial set: constants ref wired objects directly
+        for key, (_, placeholder_names) in const_with_refs.items():
             if any(name in self._parsed for name in placeholder_names):
                 to_promote.add(key)
-        # Propagate promotion transitively
+
+        # Propagate promotion
         changed = True
         while changed:
             changed = False
@@ -191,80 +286,48 @@ class WiringBase:
                 if any(dep in to_promote for dep in deps):
                     to_promote.add(key)
                     changed = True
-        # Now, split into promoted and pure-constant refs
-        const_with_const_refs: dict[str, _SpecMapping | _ConstantValue] = {}
-        const_with_wired_refs: dict[str, _SpecMapping | _ConstantValue] = {}
-        for key, (value, placeholder_names) in const_with_refs.items():
+
+        # Split into promoted and pure-constant refs
+        const_with_const_refs: dict[str, _SpecValue] = {}
+        const_with_wired_refs: dict[str, _SpecValue] = {}
+
+        for key, (const_val, _) in const_with_refs.items():
             if key in to_promote:
-                const_with_wired_refs[key] = value
+                const_with_wired_refs[key] = const_val
             else:
-                const_with_const_refs[key] = value
+                const_with_const_refs[key] = const_val
 
-        # Topologically sort and expand constant-only refs
-        if const_with_const_refs:
-            const_deps = {
-                k: self._find_placeholder_names(v)
-                for k, v in const_with_const_refs.items()
-            }
-            sorted_const_keys = self._topological_sort(const_deps)
-        else:
-            sorted_const_keys = []
-
-        # Resolve constants in dependency order
+        # Resolve pure constants in dependency order
+        # We can reuse sorted_keys order, filtering for pure constants
         resolved_consts: dict[str, _RuntimeValue] = dict(raw_consts)
-        for key in sorted_const_keys:
-            resolved = self._resolve_constant(
-                const_with_const_refs[key], resolved_consts
-            )
-            resolved_consts[key] = resolved
+
+        for key in sorted_keys:
+            if key in const_with_const_refs:
+                resolved = self._resolve_constant(
+                    const_with_const_refs[key], resolved_consts
+                )
+                resolved_consts[key] = resolved
 
         self._values: dict[str, _RuntimeValue] = resolved_consts
 
         # Create synthetic parsed entries for auto-promoted constants
-        for key, value in const_with_wired_refs.items():
-            # Create a synthetic entry that will format the string at runtime
+        for key, wired_val in const_with_wired_refs.items():
             self._parsed[key] = _ParsedEntry(
-                SYNTHETIC_CONST,  # Synthetic module marker
-                "str",  # Will use string formatting
-                None,  # No factory method
-                cast(str | _WiredRef, self._resolve(value)),
+                SYNTHETIC_CONST,
+                "str",
+                None,
+                cast(str | _WiredRef, self._resolve(wired_val)),
             )
-        if not self._thread_safe:
-            # Non-thread-safe mode: use simple list for resolving stack
-            self._resolving_stack: list[str] = []
 
     def _parse_spec_entry(
         self, key: str, value: _SpecMapping | _ConstantValue
     ) -> _UnresolvedParsedEntry | None:
         """Parse a spec entry. Returns None for constants."""
-        if SPEC_KEY_DELIMITER not in key:
-            return None  # It's a constant
+        result = self._parse_request_string(key)
+        if result is None:
+            return None
 
-        # class wiring: "module.Class name" or
-        # "module.Class name.factoryMethod"
-        type_str, name_part = key.rsplit(SPEC_KEY_DELIMITER, 1)
-        parts = type_str.split(".")
-        module_name = ".".join(parts[:-1])
-        class_name = parts[-1]
-
-        # Check if name_part contains a factory method
-        # e.g., "myInstance.from_date" -> name="myInstance",
-        # factory_method="from_date"
-        if "." in name_part:
-            name, factory_method = name_part.split(".", 1)
-            if "." in factory_method:
-                raise ValueError(
-                    f"invalid spec key '{key}': nested factory methods "
-                    f"are not supported."
-                )
-        else:
-            name = name_part
-            factory_method = None
-
-        if not module_name:
-            raise ValueError(
-                f"invalid spec key '{key}': missing module qualification"
-            )
+        module_name, class_name, name, factory_method = result
 
         return _UnresolvedParsedEntry(
             module_name,
@@ -409,9 +472,11 @@ class WiringBase:
         if len(result) != len(dependencies):
             # Find nodes in cycle for error message
             unprocessed = [n for n in dependencies if n not in result]
-            raise CircularWiringError(
-                f"Circular dependency detected in constants: "
-                f"{', '.join(unprocessed)}"
+
+            # Delegate construction of a helpful exception to the
+            # CircularWiringError helper to keep concerns separated.
+            raise CircularWiringError.from_unprocessed(
+                dependencies, unprocessed
             )
 
         return result

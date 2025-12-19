@@ -16,7 +16,6 @@ from typing import Awaitable, Callable, Protocol, cast, final
 
 from apywire.constants import PLACEHOLDER_REGEX, SYNTHETIC_CONST
 from apywire.exceptions import (
-    CircularWiringError,
     UnknownPlaceholderError,
     WiringError,
 )
@@ -93,12 +92,6 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         ThreadSafeMixin._init_thread_safety(
             self, max_lock_attempts, lock_retry_sleep
         )
-
-    def _get_resolving_stack(self) -> list[str]:
-        """Return the resolving stack for the current context."""
-        if self._thread_safe:
-            return ThreadSafeMixin._get_resolving_stack(self)
-        return self._resolving_stack
 
     def __getattr__(self, name: str) -> Accessor:
         """Return a callable accessor for the named wired object."""
@@ -185,71 +178,54 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         "module.Class instance.from_date"), the factory method is called
         instead of the class constructor.
         """
-        # Check for circular dependencies
-        stack = self._get_resolving_stack()
-        if name in stack:
-            raise CircularWiringError(
-                f"Circular wiring dependency detected: "
-                f"{' -> '.join(stack)} -> {name}"
+        if name in self._values:
+            return self._values[name]
+
+        if name not in self._parsed:
+            # Should have been caught by __getattr__ or _resolve_runtime,
+            # but just in case.
+            raise UnknownPlaceholderError(
+                f"Unknown placeholder '{name}' referenced."
             )
 
-        stack.append(name)
+        entry = self._parsed[name]
+
+        # Check for synthetic auto-promoted constant
+        if entry.module_name == SYNTHETIC_CONST and entry.class_name == "str":
+            # This is an auto-promoted constant with string interpolation
+            value = self._format_string_constant(entry.data, context=name)
+            self._values[name] = value
+            return value
+
+        module = importlib.import_module(entry.module_name)
+        cls = cast(_Constructor, getattr(module, entry.class_name))
+
+        # If a factory method is specified, get it from the class
+        if entry.factory_method:
+            constructor = cast(
+                _Constructor, getattr(cls, entry.factory_method)
+            )
+        else:
+            constructor = cls
+
+        # Resolve arguments
+        kwargs = self._resolve_runtime(entry.data, context=name)
+
         try:
-            if name in self._values:
-                return self._values[name]
-
-            if name not in self._parsed:
-                # Should have been caught by __getattr__ or _resolve_runtime,
-                # but just in case.
-                raise UnknownPlaceholderError(
-                    f"Unknown placeholder '{name}' referenced."
-                )
-
-            entry = self._parsed[name]
-
-            # Check for synthetic auto-promoted constant
-            if (
-                entry.module_name == SYNTHETIC_CONST
-                and entry.class_name == "str"
-            ):
-                # This is an auto-promoted constant with string interpolation
-                value = self._format_string_constant(entry.data, context=name)
-                self._values[name] = value
-                return value
-
-            module = importlib.import_module(entry.module_name)
-            cls = cast(_Constructor, getattr(module, entry.class_name))
-
-            # If a factory method is specified, get it from the class
-            if entry.factory_method:
-                constructor = cast(
-                    _Constructor, getattr(cls, entry.factory_method)
-                )
+            if isinstance(kwargs, dict):
+                # Separate positional args (int keys) from keyword args
+                # (str keys)
+                pos_args, kwargs_dict = self._separate_args_kwargs(kwargs)
+                instance = constructor(*pos_args, **kwargs_dict)
+            elif isinstance(kwargs, list):
+                # All positional arguments
+                instance = constructor(*kwargs)
             else:
-                constructor = cls
+                instance = constructor(kwargs)
+        except Exception as e:
+            raise WiringError(f"failed to instantiate '{name}': {e}") from e
 
-            # Resolve arguments
-            kwargs = self._resolve_runtime(entry.data, context=name)
-
-            try:
-                if isinstance(kwargs, dict):
-                    # Separate positional args (int keys) from keyword args
-                    # (str keys)
-                    pos_args, kwargs_dict = self._separate_args_kwargs(kwargs)
-                    instance = constructor(*pos_args, **kwargs_dict)
-                elif isinstance(kwargs, list):
-                    # All positional arguments
-                    instance = constructor(*kwargs)
-                else:
-                    instance = constructor(kwargs)
-            except Exception as e:
-                raise WiringError(
-                    f"failed to instantiate '{name}': {e}"
-                ) from e
-
-            return instance
-        finally:
-            stack.pop()
+        return instance
 
     def _resolve_runtime(
         self,

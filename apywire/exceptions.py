@@ -31,7 +31,64 @@ class CircularWiringError(WiringError):
 
     This class is a `WiringError` subtype for simpler programmatic
     handling of wiring-specific failures.
+
+    Utility: construct a helpful message from a dependency mapping and
+    unprocessed nodes when a topological sort fails.
     """
+
+    @classmethod
+    def from_unprocessed(
+        cls, dependencies: dict[str, set[str]], unprocessed: list[str]
+    ) -> "CircularWiringError":
+        """Create a CircularWiringError that includes a cycle when possible.
+
+        Args:
+            dependencies: Full mapping of node -> dependencies
+            unprocessed: List of nodes left unprocessed by topological sort
+
+        Returns:
+            CircularWiringError instance with a helpful message.
+        """
+        all_nodes = set(dependencies.keys())
+
+        # Use DFS limited to unprocessed nodes to find any back-edge cycle path
+        visited: set[str] = set()
+        stack: list[str] = []
+        on_stack: set[str] = set()
+
+        def dfs(node: str) -> list[str] | None:
+            visited.add(node)
+            stack.append(node)
+            on_stack.add(node)
+            for nbr in dependencies.get(node, set()):
+                if nbr not in all_nodes:
+                    continue
+                if nbr not in visited:
+                    res = dfs(nbr)
+                    if res:
+                        return res
+                elif nbr in on_stack:
+                    try:
+                        idx = stack.index(nbr)
+                    except ValueError:
+                        idx = 0
+                    return stack[idx:] + [nbr]
+            stack.pop()
+            on_stack.remove(node)
+            return None
+
+        for start in unprocessed:
+            if start not in visited:
+                cyc = dfs(start)
+                if cyc:
+                    return cls(
+                        f"Circular dependency detected: {
+                            ', '.join(unprocessed)
+                        }; "
+                        f"cycle: {' -> '.join(cyc)}"
+                    )
+
+        return cls(f"Circular dependency detected: {', '.join(unprocessed)}")
 
 
 class LockUnavailableError(RuntimeError):

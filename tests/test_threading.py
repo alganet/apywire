@@ -385,12 +385,9 @@ def test_non_threaded_mode_circular_dependency() -> None:
             "mymod_circ_nonthreaded.A a": {"b": "{b}"},
             "mymod_circ_nonthreaded.B b": {"a": "{a}"},
         }
-        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=False)
-        try:
-            _ = wired.a()
-            assert False, "Should have raised CircularWiringError"
-        except apywire.CircularWiringError as e:
-            assert "Circular wiring dependency detected" in str(e)
+        with pytest.raises(apywire.CircularWiringError) as exc_info:
+            apywire.Wiring(spec, thread_safe=False)
+        assert "Circular dependency detected" in str(exc_info.value)
     finally:
         if "mymod_circ_nonthreaded" in sys.modules:
             del sys.modules["mymod_circ_nonthreaded"]
@@ -420,12 +417,9 @@ def test_threaded_mode_circular_dependency() -> None:
             "mymod_circ_threaded.A a": {"b": "{b}"},
             "mymod_circ_threaded.B b": {"a": "{a}"},
         }
-        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=True)
-        try:
-            _ = wired.a()
-            assert False, "Should have raised CircularWiringError"
-        except apywire.CircularWiringError as e:
-            assert "Circular wiring dependency detected" in str(e)
+        with pytest.raises(apywire.CircularWiringError) as exc_info:
+            apywire.Wiring(spec, thread_safe=True)
+        assert "Circular dependency detected" in str(exc_info.value)
     finally:
         if "mymod_circ_threaded" in sys.modules:
             del sys.modules["mymod_circ_threaded"]

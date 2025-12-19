@@ -229,30 +229,7 @@ assert coord.logger is coord.services[1].logger
 
 ### CircularWiringError
 
-Raised when a circular dependency is detected:
-
-```python
-from apywire import CircularWiringError
-
-spec = {
-    "MyClass a": {"dependency": "{b}"},
-    "MyClass b": {"dependency": "{a}"},  # Circular!
-}
-
-wired = Wiring(spec)
-try:
-    obj = wired.a()
-except CircularWiringError as e:
-    print(f"Circular dependency: {e}")
-    # Error message shows the dependency chain
-```
-
-The error message includes the full resolution chain:
-
-```
-Circular dependency detected while resolving 'a':
-  a -> b -> a
-```
+A cycle in wiring will raise `CircularWiringError`; see the guide: [Circular dependencies](user-guide/circular-dependencies.md) for examples and mitigation strategies.
 
 ### UnknownPlaceholderError
 
