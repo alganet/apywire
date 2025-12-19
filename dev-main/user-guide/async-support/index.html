@@ -1053,6 +1053,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../circular-dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Circular Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../advanced/" class="md-nav__link">
         
   
@@ -1689,7 +1717,7 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="n">obj2</span> <span class="o">=</span> <span class="k">await</span> <span class="n">wired</span><span class="o">.</span><span class="n">aio</span><span class="o">.</span><span class="n">my_object</span><span class="p">()</span>  <span class="c1"># Cached!</span>
 </code></pre></div>
 <h2 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
-<p>Async access raises the same exceptions as sync access:</p>
+<p>Async access raises the same exceptions as sync access; see <a href="user-guide/circular-dependencies.md">Circular dependencies</a> for details on <code>CircularWiringError</code>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">apywire</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnknownPlaceholderError</span><span class="p">,</span> <span class="n">CircularWiringError</span>
 <a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
 <a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>

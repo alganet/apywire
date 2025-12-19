@@ -16,7 +16,7 @@
         <link rel="prev" href="../compilation/">
       
       
-        <link rel="next" href="../advanced/">
+        <link rel="next" href="../circular-dependencies/">
       
       
         
@@ -859,6 +859,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../circular-dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Circular Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../advanced/" class="md-nav__link">
         
   
@@ -1171,8 +1199,6 @@ constructor parameter it creates:</p>
 <li>Non-constant parameter defaults (e.g. object instances) fall back to type defaults.</li>
 <li>Dependencies (constructor parameters typed as another class) are generated
   recursively as separate spec entries, unless importing the dependency fails.</li>
-<li>Circular dependencies may raise <code>apywire.CircularWiringError</code> or generate partial
-  specs (tests consider both outcomes acceptable).</li>
 <li>Built-in types or types whose signatures cannot be inspected may result in an
   empty <code>{}</code> entry for that wiring key.</li>
 </ul>
@@ -1287,8 +1313,7 @@ constructor parameter it creates:</p>
 <p>Returns:
 - A <code>Spec</code> dictionary ready for <code>Wiring</code>.</p>
 <p>Raises:
-- <code>ValueError</code> for invalid entry strings (e.g., missing delimiter or module)
-- <code>apywire.exceptions.CircularWiringError</code> when a cycle is detected</p>
+- <code>ValueError</code> for invalid entry strings (e.g., missing delimiter or module)</p>
 <h2 id="notes-and-limitations">Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Permanent link">&para;</a></h2>
 <ul>
 <li>The generator bases decisions on constructor type annotations; without them

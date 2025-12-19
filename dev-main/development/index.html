@@ -722,6 +722,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../user-guide/circular-dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Circular Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../user-guide/advanced/" class="md-nav__link">
         
   
@@ -1898,7 +1926,7 @@ SPDX-License-Identifier: ISC
 <p>Thread-safe mode uses:
 1. <strong>Per-attribute locks</strong>: <code>dict[str, threading.Lock]</code>
 2. <strong>Global fallback lock</strong>: Single <code>threading.Lock</code>
-3. <strong>Thread-local state</strong>: For circular dependency detection</p>
+3. <strong>Thread-local state</strong>: For lock-related per-thread state used by the thread-safety mixin (mode, held locks)</p>
 <p>See <code>apywire/threads.py</code> for details.</p>
 <h4 id="compilation">Compilation<a class="headerlink" href="#compilation" title="Permanent link">&para;</a></h4>
 <p>The compiler generates Python code that:
