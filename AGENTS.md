@@ -49,6 +49,12 @@ The project uses extremely strict mypy settings including `disallow_any_expr=tru
 **Testing Requirements:**
 All changes must maintain 100% branch coverage. Test both runtime and compiled behavior, plus async and thread-safe variants where applicable. Use descriptive test names: `test_<feature>_<scenario>_<expected_behavior>()`.
 
+**Testing Conventions:**
+- **Compiled Objects**: Use `wired = execd["compiled"]` from `exec(code, execd)`. Do not instantiate `Compiled` manually.
+- **Type Safety**: Use `typing.Protocol` for dynamic/compiled objects. Avoid `Any` and `type: ignore`.
+- **Module Mocking**: Use `sys.modules` injection with `try...finally` cleanup for custom classes.
+- **Async Tests**: Use `asyncio.run()` explicitly within test functions.
+
 **Common Gotchas:**
 - SPDX headers required on all files (run `make format` to auto-add)
 - 79-character line limit enforced by `black`

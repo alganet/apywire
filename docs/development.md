@@ -49,6 +49,32 @@ pytest -xvs
 
 The project enforces 95% test coverage or higher. New code should include comprehensive tests.
 
+#### Testing Conventions
+
+- **Compiled Code Testing**: When testing compiled code, use the pre-instantiated `compiled` object from the execution namespace instead of manually instantiating the class.
+  ```python
+  exec(code, execd)
+  wired = execd["compiled"]  # Use this instance
+  ```
+- **Type Safety in Tests**: Avoid `Any` and `type: ignore`. Use `typing.Protocol` to define the expected interface of dynamic or compiled objects.
+  ```python
+  class MockConfig(Protocol):
+      def config(self) -> Config: ...
+  
+  execd: dict[str, MockConfig] = {}
+  ```
+- **Coverage**: Aim for 100% branch coverage.
+- **Naming**: Use descriptive test names: `test_<feature>_<scenario>_<expected_behavior>()`.
+- **Module Mocking**: When testing custom classes, inject them into `sys.modules` using a `try...finally` block to ensure cleanup.
+  ```python
+  class MockModule(ModuleType): ...
+  sys.modules["mymod"] = MockModule()
+  try:
+      # test code
+  finally:
+      del sys.modules["mymod"]
+  ```
+
 ### Code Formatting
 
 The project uses `black` and `isort` for code formatting:
