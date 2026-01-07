@@ -71,15 +71,15 @@ wheels = [
 
 [[package]]
 name = "auditwheel"
-version = "6.5.1"
+version = "6.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
     { name = "pyelftools" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9c/23/fd932c8fea8d79ccbb43f75ec6cd74d4cafdead87bb49d60991fda86267f/auditwheel-6.5.1.tar.gz", hash = "sha256:11e611f7090b6cf4075535b88f4364819b849d82702dabb0947cf7c9c5d587a0", size = 4662230, upload-time = "2025-12-28T10:03:07.103Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/ed/342df5a75589103d72402dcdd88d7b8cc2df338fbc39042ce1b3ac008960/auditwheel-6.6.0.tar.gz", hash = "sha256:277f3b315ad0b04df0a2be2d126c3fd39930bc265df0f9589d78c970ff06f52b", size = 4663481, upload-time = "2026-01-04T14:34:21.577Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fa/1d/7fd5ba07640919a98683e71620fdaa77e22721d054ed61e0fc22d218a2db/auditwheel-6.5.1-py3-none-any.whl", hash = "sha256:0a4611a711ce1e930072708336fabf0b6b221bb69caeb5f4e1e6c3949e79d32b", size = 58814, upload-time = "2025-12-28T10:03:05.008Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/c2/bb8ba1cec816fa356e19da83c59bfd4ac34dba1ae41eb7622c18f4b1d48d/auditwheel-6.6.0-py3-none-any.whl", hash = "sha256:3e8479856ca582625b5457204cbb62d1614d3bc7e760ee307c04c34c912ebcad", size = 59184, upload-time = "2026-01-04T14:34:19.932Z" },
 ]
 
 [[package]]
