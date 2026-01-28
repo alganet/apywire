@@ -16,3 +16,8 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Alexandre Gomes Gaigalas <alganet@gmail.com>"
 SPDX-License-Identifier = "ISC"
 
+[[annotations]]
+path = [ ".vscode/**", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/**" ]
+SPDX-FileCopyrightText = "2025 Alexandre Gomes Gaigalas <alganet@gmail.com>"
+SPDX-License-Identifier = "ISC"
+

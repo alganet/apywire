@@ -1,8 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2025 Alexandre Gomes Gaigalas <alganet@gmail.com>
-
-SPDX-License-Identifier: ISC
--->
 ---
 name: Bug Report
 about: Report a bug
@@ -20,5 +15,6 @@ Steps to reproduce.
 What should happen.
 
 **Environment**
-- OS: 
+- OS:
 - Python version:
+- apywire version:
