@@ -1170,6 +1170,45 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#compiledaio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CompiledAio
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#apywire.CompiledAio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CompiledAio
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CompiledAio">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#apywire.CompiledAio.__getattr__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __getattr__
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1843,6 +1882,45 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#compiledaio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CompiledAio
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#apywire.CompiledAio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CompiledAio
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CompiledAio">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#apywire.CompiledAio.__getattr__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __getattr__
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2443,11 +2521,27 @@ asynchronously. We use <code>aio</code> to avoid the reserved keyword
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If True, generate <code>async def</code> accessors for wired
-attributes that await referenced attributes and call
-blocking constructors in a threadpool via
-<code>asyncio.get_running_loop().run_in_executor</code>. When False
-(default) generate synchronous <code>def</code> accessors.</p>
+                <p>If True, keep sync <code>def</code> accessors AND add an
+<code>.aio</code> cached property (<code>CompiledAio</code> wrapper).
+<code>{aio.name}</code> placeholders resolve to
+<code>self.aio.name</code> (async accessor attribute access).</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>thread_safe</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, generate thread-safe accessors using
+<code>ThreadSafeMixin</code>.</p>
               </div>
             </td>
             <td>
@@ -2958,6 +3052,76 @@ wired = Wiring(spec)</p>
     <div class="doc doc-contents ">
 
         <p>Return an async callable for the named wired object.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="compiledaio">CompiledAio<a class="headerlink" href="#compiledaio" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="apywire.CompiledAio" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">CompiledAio</span>
+
+
+<a href="#apywire.CompiledAio" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>Async accessor wrapper for compiled containers.</p>
+<p>Wraps a compiled container's sync methods with async access.
+Cached values are returned directly; uncached values are resolved
+via <code>run_in_executor</code> to avoid blocking the event loop.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="apywire.CompiledAio.__getattr__" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">__getattr__</span>
+
+
+<a href="#apywire.CompiledAio.__getattr__" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Awaitable</span><span class="p">[</span><span class="nb">object</span><span class="p">]]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return an async callable for the named accessor.</p>
 
 
     </div>

@@ -850,10 +850,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-async-accessors-if-aiotrue" class="md-nav__link">
+  <a href="#4-async-support-if-aiotrue" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Async Accessors (if aio=True)
+        4. Async Support (if aio=True)
       
     </span>
   </a>
@@ -1534,10 +1534,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-async-accessors-if-aiotrue" class="md-nav__link">
+  <a href="#4-async-support-if-aiotrue" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Async Accessors (if aio=True)
+        4. Async Support (if aio=True)
       
     </span>
   </a>
@@ -2006,17 +2006,17 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="s2">&quot;start&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="n">year</span><span class="o">=</span><span class="mi">2025</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="s2">&quot;start&quot;</span><span class="p">]</span>
 </code></pre></div>
-<h3 id="4-async-accessors-if-aiotrue">4. Async Accessors (if aio=True)<a class="headerlink" href="#4-async-accessors-if-aiotrue" title="Permanent link">&para;</a></h3>
-<p>Async versions of accessor methods:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">AioAccessors</span><span class="p">:</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>        <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>        <span class="k">return</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wired</span><span class="o">.</span><span class="n">start</span><span class="p">())</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="nd">@property</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">aio</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aio_accessors</span>
+<h3 id="4-async-support-if-aiotrue">4. Async Support (if aio=True)<a class="headerlink" href="#4-async-support-if-aiotrue" title="Permanent link">&para;</a></h3>
+<p>A <code>.aio</code> cached property that wraps sync methods with async access via <code>CompiledAio</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cached_property</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">apywire.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompiledAio</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Added to the class:</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="nd">@cached_property</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">aio</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="k">return</span> <span class="n">CompiledAio</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 </code></pre></div>
+<p>Access async versions via <code>await compiled.aio.start()</code>. The <code>{aio.name}</code> placeholder syntax generates <code>self.aio.name</code> to inject async accessors.</p>
 <h3 id="5-thread-safety-if-thread_safetrue">5. Thread Safety (if thread_safe=True)<a class="headerlink" href="#5-thread-safety-if-thread_safetrue" title="Permanent link">&para;</a></h3>
 <p>Locking mechanisms and thread-local state.</p>
 <h2 id="why-compile">Why Compile?<a class="headerlink" href="#why-compile" title="Permanent link">&para;</a></h2>

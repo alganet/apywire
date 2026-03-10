@@ -1969,16 +1969,22 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="c1"># Instantiate and cache...</span>
 </code></pre></div>
 <h4 id="placeholder-resolution">Placeholder Resolution<a class="headerlink" href="#placeholder-resolution" title="Permanent link">&para;</a></h4>
-<p>Strings like <code>{name}</code> are converted to <code>_WiredRef</code> markers during parsing:</p>
+<p>Strings like <code>{name}</code> are converted to <code>_WiredRef</code> markers during parsing, and <code>{aio.name}</code> to <code>_AioWiredRef</code> markers:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">_WiredRef</span><span class="p">:</span>
 <a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,)</span>
 <a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">_resolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_placeholder</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>        <span class="k">return</span> <span class="n">_WiredRef</span><span class="p">(</span><span class="n">ref_name</span><span class="p">)</span>
-<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="k">return</span> <span class="n">obj</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">_AioWiredRef</span><span class="p">:</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,)</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">_resolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_placeholder</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>        <span class="n">ref_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_placeholder_name</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>        <span class="k">if</span> <span class="n">ref_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;aio.&quot;</span><span class="p">):</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>            <span class="k">return</span> <span class="n">_AioWiredRef</span><span class="p">(</span><span class="n">ref_name</span><span class="p">[</span><span class="mi">4</span><span class="p">:])</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>        <span class="k">return</span> <span class="n">_WiredRef</span><span class="p">(</span><span class="n">ref_name</span><span class="p">)</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>    <span class="k">return</span> <span class="n">obj</span>
 </code></pre></div>
-<p>At instantiation time, <code>_WiredRef</code> markers are resolved to actual objects.</p>
+<p>At instantiation time, <code>_WiredRef</code> markers are resolved to actual objects, and <code>_AioWiredRef</code> markers are resolved to async accessor callables.</p>
 <h4 id="thread-safety">Thread Safety<a class="headerlink" href="#thread-safety" title="Permanent link">&para;</a></h4>
 <p>Thread-safe mode uses:
 1. <strong>Per-attribute locks</strong>: <code>dict[str, threading.Lock]</code>
