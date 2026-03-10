@@ -135,20 +135,21 @@ def start(self):
     return self._values["start"]
 ```
 
-### 4. Async Accessors (if aio=True)
+### 4. Async Support (if aio=True)
 
-Async versions of accessor methods:
+A `.aio` cached property that wraps sync methods with async access via `CompiledAio`:
 
 ```python
-class AioAccessors:
-    async def start(self):
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, lambda: self._wired.start())
+from functools import cached_property
+from apywire.runtime import CompiledAio
 
-@property
+# Added to the class:
+@cached_property
 def aio(self):
-    return self._aio_accessors
+    return CompiledAio(self)
 ```
+
+Access async versions via `await compiled.aio.start()`. The `{aio.name}` placeholder syntax generates `self.aio.name` to inject async accessors.
 
 ### 5. Thread Safety (if thread_safe=True)
 

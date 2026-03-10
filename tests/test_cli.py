@@ -198,7 +198,10 @@ def test_cli_compile_with_aio_flag() -> None:
 
     assert result == 0
     output = mock_stdout.getvalue()
-    assert "async def d(self):" in output
+    # aio=True generates sync methods + .aio property
+    assert "def d(self):" in output
+    assert "cached_property" in output
+    assert "CompiledAio" in output
 
 
 def test_cli_compile_with_thread_safe_flag() -> None:

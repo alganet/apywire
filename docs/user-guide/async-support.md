@@ -176,6 +176,38 @@ async def get_user(user_id: int, repo = Depends(get_repository)):
     return user
 ```
 
+## Async Accessor Injection (`{aio.name}`)
+
+You can inject async accessors into wired objects using the `{aio.name}` placeholder syntax. Instead of resolving the dependency eagerly, `{aio.name}` injects a callable that returns an awaitable — the dependency is resolved lazily when `await`ed:
+
+```python
+from apywire import Wiring
+
+spec = {
+    "myapp.Database db": {},
+    "myapp.UserService users": {"db": "{db}"},
+    "myapp.UserHandler handler": {"users": "{aio.users}"},
+}
+
+wired = Wiring(spec)
+handler = wired.handler()
+
+# handler.users is an async accessor (callable returning Awaitable)
+# The UserService is NOT instantiated yet
+
+async def handle_request():
+    users = await handler.users()  # Now UserService is instantiated
+    return users.get_user("foo")
+```
+
+This is useful when:
+
+- A handler needs lazy, async access to a dependency
+- You want to defer instantiation to request time
+- You're building with async frameworks like Starlette, FastAPI, or aiohttp
+
+The `{aio.name}` syntax works with both runtime containers and compiled containers. In compiled code, `{aio.name}` generates `self.aio.name` (an attribute access on the `.aio` property).
+
 ## Compiling with Async Support
 
 When compiling your wiring spec to code, you can include async support:
@@ -184,10 +216,10 @@ When compiling your wiring spec to code, you can include async support:
 from apywire import WiringCompiler
 
 compiler = WiringCompiler(spec)
-code = compiler.compile(aio=True)  # Include async accessors in generated code
+code = compiler.compile(aio=True)  # Include .aio property in generated code
 ```
 
-The generated code will include both sync and async accessor methods.
+The generated code keeps all methods as sync `def` and adds a `.aio` cached property (`CompiledAio` wrapper) for async access.
 
 ## Thread Safety with Async
 

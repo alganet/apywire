@@ -234,7 +234,7 @@ def test_factory_method_async_accessor() -> None:
 
 
 def test_factory_method_compile_async() -> None:
-    """Test factory method compilation with async mode."""
+    """Test factory method compilation with aio=True mode."""
     spec: apywire.Spec = {
         "datetime.datetime myInstance.fromtimestamp": {
             0: 1234567890,
@@ -248,26 +248,40 @@ def test_factory_method_compile_async() -> None:
 
     # The compiled code should call datetime.datetime.fromtimestamp
     assert "datetime.datetime.fromtimestamp" in python_code
-    assert "async def myInstance" in python_code
+    # aio=True generates sync def methods (additive)
+    assert "def myInstance" in python_code
 
-    # Execute and test the compiled async code
-    import asyncio
+    # Execute and test sync access
+    from typing import Awaitable, Callable, Protocol, cast
 
-    class CompiledProt(Protocol):
-        async def myInstance(self) -> datetime.datetime: ...
+    class _DynAccessor(Protocol):
+        def __getattr__(
+            self, name: str
+        ) -> Callable[[], Awaitable[object]]: ...
 
-    execd: dict[str, CompiledProt] = {}
+    class _Compiled(Protocol):
+        def myInstance(self) -> datetime.datetime: ...
+        @property
+        def aio(self) -> _DynAccessor: ...
+
+    execd: dict[str, _Compiled] = {}
     exec(python_code, execd)
+    compiled = execd["compiled"]
 
-    compiled: CompiledProt = execd["compiled"]
-
-    async def get() -> datetime.datetime:
-        return await compiled.myInstance()
-
-    instance = asyncio.run(get())
+    instance = compiled.myInstance()
     assert isinstance(instance, datetime.datetime)
     expected = datetime.datetime.fromtimestamp(1234567890)
     assert instance == expected
+
+    # Async access via .aio
+    import asyncio
+
+    async def get() -> datetime.datetime:
+        accessor = compiled.aio.myInstance()
+        return await cast(Awaitable[datetime.datetime], accessor)
+
+    aio_instance = asyncio.run(get())
+    assert aio_instance is instance  # Cached singleton
 
 
 def test_regular_constructor_still_works() -> None:

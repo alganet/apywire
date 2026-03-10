@@ -23,8 +23,3 @@ PLACEHOLDER_REGEX = re.compile(PLACEHOLDER_PATTERN)
 SYNTHETIC_CONST = "__sconst__"  # Synthetic module for promoted constants
 
 CACHE_ATTR_PREFIX = "_"  # Prefix for cache attributes (_name)
-
-COMPILED_VAR_PREFIX = "__val_"  # Prefix for temp variables in compiled code
-COMPILED_ARG_PREFIX = (
-    "__arg_"  # Prefix for argument variables in compiled code
-)

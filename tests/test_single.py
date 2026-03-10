@@ -42,18 +42,13 @@ def test_simple_raise_on_nonexistent_wired_attribute() -> None:
 def test_empty_class_compiled() -> None:
     pythonCode = apywire.WiringCompiler({}, thread_safe=False).compile()
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
-    assert (
-        dedent(
-            """\
+    assert dedent("""\
         class Compiled:
             pass
 
 
         compiled = Compiled()
-        """
-        )
-        == pythonCode
-    )
+        """) == pythonCode
 
 
 def test_simple_compile_constructor_args() -> None:
@@ -67,9 +62,7 @@ def test_simple_compile_constructor_args() -> None:
 
     pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
-    assert (
-        dedent(
-            """\
+    assert dedent("""\
             import datetime
 
 
@@ -84,10 +77,7 @@ def test_simple_compile_constructor_args() -> None:
 
 
             compiled = Compiled()
-            """
-        )
-        == pythonCode
-    )
+            """) == pythonCode
 
     class MockHasBirthday(Protocol):
         def birthday(self) -> datetime.datetime: ...
@@ -150,8 +140,7 @@ def test_deep_module_paths() -> None:
         # Test compilation
         pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
         pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
-        expected = dedent(
-            """\
+        expected = dedent("""\
             import foo.bar.baz.bat
 
 
@@ -164,8 +153,7 @@ def test_deep_module_paths() -> None:
 
 
             compiled = Compiled()
-            """
-        )
+            """)
         assert expected == pythonCode
 
         class MockHasSomeModule(Protocol):
@@ -214,9 +202,7 @@ def test_compile_constants_and_references() -> None:
     }
     pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
-    assert (
-        dedent(
-            """\
+    assert dedent("""\
             import datetime
 
 
@@ -234,10 +220,7 @@ def test_compile_constants_and_references() -> None:
 
 
             compiled = Compiled()
-            """
-        )
-        == pythonCode
-    )
+            """) == pythonCode
 
     class CompiledMock(Protocol):
         def myYearValue(self) -> int: ...
@@ -267,9 +250,7 @@ def test_compile_inlines_mutated_values() -> None:
     compiler._values["myYearValue"] = 1999
     pythonCode = compiler.compile()
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
-    assert (
-        dedent(
-            """\
+    assert dedent("""\
             import datetime
 
 
@@ -287,10 +268,7 @@ def test_compile_inlines_mutated_values() -> None:
 
 
             compiled = Compiled()
-            """
-        )
-        == pythonCode
-    )
+            """) == pythonCode
 
 
 def test_compile_uses_self_for_non_constants() -> None:
@@ -321,8 +299,7 @@ def test_compile_uses_self_for_non_constants() -> None:
         }
         pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile()
         pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
-        expected = dedent(
-            """\
+        expected = dedent("""\
             import mymod
 
 
@@ -340,8 +317,7 @@ def test_compile_uses_self_for_non_constants() -> None:
 
 
             compiled = Compiled()
-            """
-        )
+            """)
         assert expected == pythonCode
     finally:
         if "mymod" in sys.modules:

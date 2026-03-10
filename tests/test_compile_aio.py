@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: ISC
 
 import asyncio
+import datetime
 from textwrap import dedent
-from typing import Awaitable, Protocol, cast
+from typing import Awaitable, Callable, Protocol, cast
 
 import black
 import pytest
@@ -15,7 +16,18 @@ THREE_INDENTS = 12
 BLACK_MODE = black.FileMode(line_length=79 - THREE_INDENTS)
 
 
+class _DynamicAccessor(Protocol):
+    """Protocol for dynamic attribute access (e.g., .aio)."""
+
+    def __getattr__(self, name: str) -> Callable[[], Awaitable[object]]: ...
+
+
 def test_aio_compile_constructor_args() -> None:
+    class _Compiled(Protocol):
+        def birthday(self) -> datetime.datetime: ...
+        @property
+        def aio(self) -> _DynamicAccessor: ...
+
     spec: apywire.Spec = {
         "datetime.datetime birthday": {
             "day": 25,
@@ -26,18 +38,17 @@ def test_aio_compile_constructor_args() -> None:
     pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
         aio=True
     )
-    execd: dict[str, object] = {}
+    execd: dict[str, _Compiled] = {}
     exec(pythonCode, execd)
     compiled = execd["compiled"]
-    import datetime
 
-    class CompiledProto(Protocol):
-        def birthday(self) -> Awaitable[datetime.datetime]: ...
+    # Sync access works
+    assert compiled.birthday().year == 1990
 
-    compiled = cast(CompiledProto, compiled)
-
+    # Async access via .aio works
     async def get() -> datetime.datetime:
-        return await compiled.birthday()
+        accessor = compiled.aio.birthday()
+        return await cast(Awaitable[datetime.datetime], accessor)
 
     instance = asyncio.run(get())
     assert instance.year == 1990
@@ -63,6 +74,12 @@ def test_aio_compile_references_and_caching() -> None:
             self.SomeClass = SomeClass
             self.Wrapper = Wrapper
 
+    class _Compiled(Protocol):
+        def wrapper(self) -> Wrapper: ...
+        def other(self) -> SomeClass: ...
+        @property
+        def aio(self) -> _DynamicAccessor: ...
+
     mod = MockModule()
     sys.modules["mymod_async_c"] = mod
     try:
@@ -73,33 +90,24 @@ def test_aio_compile_references_and_caching() -> None:
         pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
             aio=True
         )
-        execd: dict[str, object] = {}
+        execd: dict[str, _Compiled] = {}
         exec(pythonCode, execd)
 
-        class CompiledProt(Protocol):
-            def other(self) -> Awaitable[SomeClass]: ...
-            def wrapper(self) -> Awaitable[Wrapper]: ...
-
-        compiled = cast(CompiledProt, execd["compiled"])
+        compiled = execd["compiled"]
         SomeClass.inst_count = 0
 
-        async def get_wrapper() -> Wrapper:
-            return await compiled.wrapper()
-
-        wrapper = asyncio.run(get_wrapper())
+        # Sync access resolves deps
+        wrapper = compiled.wrapper()
         assert isinstance(wrapper, Wrapper)
         assert isinstance(wrapper.child, SomeClass)
 
-        # Ensure the referenced instance is cached and reused
-        async def get_other_compiled() -> SomeClass:
-            return await compiled.other()
-
-        other_compiled = asyncio.run(get_other_compiled())
+        # Cached and reused via sync
+        other_compiled = compiled.other()
         assert wrapper.child is other_compiled
 
-        # Note: compiled.other() is async and cached; verify by awaiting twice
+        # Async access also returns cached values
         async def get_other() -> SomeClass:
-            return await compiled.other()
+            return await cast(Awaitable[SomeClass], compiled.aio.other())
 
         other_inst = asyncio.run(get_other())
         assert other_inst is wrapper.child
@@ -131,6 +139,11 @@ def test_aio_compile_nested_structures() -> None:
             self.Item = Item
             self.ListContainer = ListContainer
 
+    class _Compiled(Protocol):
+        def container(self) -> ListContainer: ...
+        def one(self) -> Item: ...
+        def two(self) -> Item: ...
+
     mod = MockModule()
     sys.modules["mymod_aio"] = mod
     try:
@@ -142,36 +155,18 @@ def test_aio_compile_nested_structures() -> None:
                 "lookup": {"a": "{one}", "b": 2},
             },
         }
-        # Check compiled aio behavior
         pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
             aio=True
         )
-        execd: dict[str, object] = {}
+        execd: dict[str, _Compiled] = {}
         exec(pythonCode, execd)
-        compiled_raw = execd["compiled"]
+        compiled = execd["compiled"]
 
-        class CompiledProt(Protocol):
-            def one(self) -> Awaitable[Item]: ...
-            def two(self) -> Awaitable[Item]: ...
-            def container(self) -> Awaitable[ListContainer]: ...
+        # Sync access
+        container = compiled.container()
+        one = compiled.one()
+        two = compiled.two()
 
-        compiled: CompiledProt = cast(CompiledProt, compiled_raw)
-
-        async def get_container() -> ListContainer:
-            return await compiled.container()
-
-        container = asyncio.run(get_container())
-
-        # Access via compiled.one() should be awaited
-        async def get_one() -> Item:
-            return await compiled.one()
-
-        one = asyncio.run(get_one())
-
-        async def get_two() -> Item:
-            return await compiled.two()
-
-        two = asyncio.run(get_two())
         assert container.items[0] is one
         assert container.items[1] is two
         assert container.items[2] == 3
@@ -194,37 +189,28 @@ def test_aio_compile_constructor_args_source() -> None:
         aio=True
     )
     pythonCode = black.format_str(pythonCode, mode=BLACK_MODE)
-    assert (
-        dedent(
-            """\
-            import asyncio
+    assert dedent("""\
             import datetime
+            from functools import cached_property
+            from apywire.runtime import CompiledAio
 
 
             class Compiled:
 
-                async def birthday(self):
+                def birthday(self):
                     if not hasattr(self, "_birthday"):
-                        __val_day = 25
-                        __val_month = 12
-                        __val_year = 1990
-                        loop = asyncio.get_running_loop()
-                        self._birthday = await loop.run_in_executor(
-                            None,
-                            lambda: datetime.datetime(
-                                day=__val_day,
-                                month=__val_month,
-                                year=__val_year,
-                            ),
+                        self._birthday = datetime.datetime(
+                            day=25, month=12, year=1990
                         )
                     return self._birthday
 
+                @cached_property
+                def aio(self):
+                    return CompiledAio(self)
+
 
             compiled = Compiled()
-            """
-        )
-        == pythonCode
-    )
+            """) == pythonCode
 
 
 def test_aio_accessor_constant_not_run_in_executor(
@@ -250,6 +236,42 @@ def test_aio_accessor_constant_not_run_in_executor(
     assert result == 42
 
 
+def test_aio_compiled_constant_not_run_in_executor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compiled constants skip run_in_executor, matching runtime."""
+    import asyncio as aio_mod
+
+    class _Compiled(Protocol):
+        @property
+        def aio(self) -> _DynamicAccessor: ...
+
+    spec: apywire.Spec = {"myConst": 42}
+    code = apywire.WiringCompiler(spec).compile(aio=True)
+    execd: dict[str, _Compiled] = {}
+    exec(code, execd)
+    compiled = execd["compiled"]
+
+    class DummyLoop:
+        def run_in_executor(
+            self, *args: object, **kwargs: object
+        ) -> object:
+            raise AssertionError(
+                "run_in_executor should not be called"
+                " for constants"
+            )
+
+    monkeypatch.setattr(
+        aio_mod, "get_running_loop", lambda: DummyLoop()
+    )
+
+    async def get() -> int:
+        return await cast(Awaitable[int], compiled.aio.myConst())
+
+    result = asyncio.run(get())
+    assert result == 42
+
+
 @pytest.mark.parametrize(
     "class_path, args, expected",
     [
@@ -262,28 +284,36 @@ def test_compile_aio_instantiation(
     class_path: str, args: object, expected: object
 ) -> None:
     """Test async compilation of various stdlib classes."""
+
+    class _Compiled(Protocol):
+        def obj(self) -> object: ...
+        @property
+        def aio(self) -> _DynamicAccessor: ...
+
     spec = {f"{class_path} obj": args}
     compiler = apywire.WiringCompiler(spec)  # type: ignore[arg-type]
     code = compiler.compile(aio=True)
 
-    execd: dict[str, object] = {"asyncio": asyncio}
+    execd: dict[str, _Compiled] = {}
     exec(code, execd)
     compiled = execd["compiled"]
 
+    # Sync access works
+    val = compiled.obj()
+    assert val == expected
+
+    # Async access via .aio works
     async def run() -> None:
-        # When compiled with aio=True, the methods themselves are async
-        coro = cast(Awaitable[object], getattr(compiled, "obj")())
-        val = await coro
-        assert val == expected
+        aio_val = await compiled.aio.obj()
+        assert aio_val == expected
 
     asyncio.run(run())
 
 
-def test_aio_compile_await_non_self_call() -> None:
-    """Test _replace_awaits_with_locals with non-self await nodes."""
+def test_aio_compile_sync_methods_generated() -> None:
+    """Test that compile(aio=True) generates sync def methods."""
     from apywire import Spec, WiringCompiler
 
-    # Create spec with async compilation that could have nested awaits
     spec: Spec = {
         "datetime.datetime now": {"year": 2025, "month": 1, "day": 1},
         "datetime.datetime later": {"year": 2025, "month": 6, "day": 15},
@@ -291,13 +321,19 @@ def test_aio_compile_await_non_self_call() -> None:
 
     code = WiringCompiler(spec, thread_safe=False).compile(aio=True)
 
-    # Verify code was generated (exact await handling is complex)
-    assert "async def now(self):" in code
-    assert "async def later(self):" in code
+    # Methods are sync def, not async def
+    assert "def now(self):" in code
+    assert "def later(self):" in code
+    assert "async def now(self):" not in code
+    assert "async def later(self):" not in code
+
+    # But aio features are present
+    assert "cached_property" in code
+    assert "CompiledAio" in code
 
 
-def test_aio_compile_nested_call_replacement() -> None:
-    """Test _replace_awaits_with_locals in Call nodes."""
+def test_aio_compile_references_in_sync() -> None:
+    """Test that sync methods correctly resolve {ref} placeholders."""
     import sys
     from types import ModuleType
 
@@ -322,9 +358,14 @@ def test_aio_compile_nested_call_replacement() -> None:
         }
         code = WiringCompiler(spec, thread_safe=False).compile(aio=True)
 
-        # Verify async code was generated with replaced awaits
-        assert "async def root(self):" in code
-        assert "__val_" in code
+        # Methods are sync def
+        assert "def root(self):" in code
+        assert "def a(self):" in code
+        assert "def b(self):" in code
+
+        # Sync refs use self.name() calls
+        assert "self.a()" in code
+        assert "self.b()" in code
 
     finally:
         del sys.modules["nested_call"]
@@ -357,3 +398,64 @@ def test_compile_constant_accessor_skip() -> None:
 
     finally:
         del sys.modules["const_test"]
+
+
+def test_aio_wired_ref_placeholder() -> None:
+    """Test {aio.name} placeholder injects async accessor via DI."""
+    import sys
+    from types import ModuleType
+
+    class Service:
+        def greet(self) -> str:
+            return "hello"
+
+    class Handler:
+        def __init__(self, svc: Callable[[], Awaitable[object]]) -> None:
+            self.svc = svc
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("aio_ref_test")
+            self.Service = Service
+            self.Handler = Handler
+
+    class _Compiled(Protocol):
+        def handler(self) -> Handler: ...
+
+    sys.modules["aio_ref_test"] = MockModule()
+    try:
+        spec: apywire.Spec = {
+            "aio_ref_test.Service svc": {},
+            "aio_ref_test.Handler handler": {"svc": "{aio.svc}"},
+        }
+
+        # Test runtime
+        wiring = apywire.Wiring(spec)
+        handler = cast(Handler, wiring.handler())
+        assert callable(handler.svc)
+
+        async def run() -> None:
+            resolved_svc = await handler.svc()
+            assert isinstance(resolved_svc, Service)
+            assert resolved_svc.greet() == "hello"
+
+        asyncio.run(run())
+
+        # Test compiled
+        code = apywire.WiringCompiler(spec).compile(aio=True)
+        assert "self.aio.svc" in code
+
+        execd: dict[str, _Compiled] = {}
+        exec(code, execd)
+        compiled = execd["compiled"]
+        compiled_handler = compiled.handler()
+        assert callable(compiled_handler.svc)
+
+        async def run_compiled() -> None:
+            resolved_svc = await compiled_handler.svc()
+            assert isinstance(resolved_svc, Service)
+
+        asyncio.run(run_compiled())
+    finally:
+        if "aio_ref_test" in sys.modules:
+            del sys.modules["aio_ref_test"]

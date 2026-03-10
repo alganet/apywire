@@ -47,6 +47,20 @@ class _WiredRef:
         self.name = name
 
 
+class _AioWiredRef:
+    """Marker for an async accessor reference.
+
+    Unlike _WiredRef which resolves to the instantiated value,
+    _AioWiredRef resolves to an async accessor callable.
+    Used with ``{aio.name}`` placeholder syntax.
+    """
+
+    __slots__ = ("name",)
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
 # User-provided spec values: primitives, containers, or placeholders
 _SpecValue: TypeAlias = (
     _ConstantValue
@@ -57,9 +71,11 @@ _SpecValue: TypeAlias = (
 )
 
 # After parsing: placeholder strings "{name}" become _WiredRef markers
+# and "{aio.name}" become _AioWiredRef markers
 _ResolvedValue: TypeAlias = (
     _ConstantValue
     | _WiredRef
+    | _AioWiredRef
     | list["_ResolvedValue"]
     | tuple["_ResolvedValue", ...]
     | dict[str | int, "_ResolvedValue"]
@@ -357,11 +373,13 @@ class WiringBase(SpecParser):
         """Resolve placeholders into `_WiredRef` markers for runtime.
 
         Replaces strings of the form "{name}" with a `_WiredRef(name)`
-        for later resolution.
+        and "{aio.name}" with a `_AioWiredRef(name)` for later resolution.
         """
         if isinstance(obj, str):
             if self._is_placeholder(obj):
                 ref_name = self._extract_placeholder_name(obj)
+                if ref_name.startswith("aio."):
+                    return _AioWiredRef(ref_name[4:])
                 return _WiredRef(ref_name)
             return obj
         elif isinstance(obj, dict):
@@ -409,6 +427,9 @@ class WiringBase(SpecParser):
     def _find_placeholder_names(self, obj: _SpecValue) -> set[str]:
         """Find all placeholder names referenced in a value.
 
+        Strips ``aio.`` prefix so ``{aio.users}`` is tracked as
+        depending on ``users``.
+
         Args:
             obj: Value to search for placeholders
 
@@ -419,7 +440,11 @@ class WiringBase(SpecParser):
         if isinstance(obj, str):
             # Find all placeholders in the string (embedded or not)
             matches: list[str] = PLACEHOLDER_REGEX.findall(obj)
-            names.update(matches)
+            for match in matches:
+                if match.startswith("aio."):
+                    names.add(match[4:])
+                else:
+                    names.add(match)
         elif isinstance(obj, dict):
             for v in obj.values():
                 names.update(self._find_placeholder_names(v))

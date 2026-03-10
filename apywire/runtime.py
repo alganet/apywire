@@ -14,7 +14,11 @@ from functools import cached_property
 from operator import itemgetter
 from typing import Awaitable, Callable, Protocol, cast, final
 
-from apywire.constants import PLACEHOLDER_REGEX, SYNTHETIC_CONST
+from apywire.constants import (
+    CACHE_ATTR_PREFIX,
+    PLACEHOLDER_REGEX,
+    SYNTHETIC_CONST,
+)
 from apywire.exceptions import (
     UnknownPlaceholderError,
     WiringError,
@@ -24,6 +28,7 @@ from apywire.wiring import (
     Spec,
     SpecEntry,
     WiringBase,
+    _AioWiredRef,
     _ResolvedValue,
     _RuntimeValue,
     _WiredRef,
@@ -33,6 +38,7 @@ __all__ = [
     "WiringRuntime",
     "Accessor",
     "AioAccessor",
+    "CompiledAio",
     "Spec",
     "SpecEntry",
 ]
@@ -235,8 +241,17 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         """Recursively resolve values at runtime.
 
         Converts `_WiredRef` placeholders into actual objects by calling
-        their accessors.
+        their accessors, and `_AioWiredRef` into async accessor callables.
         """
+        if isinstance(o, _AioWiredRef):
+            # Return the async accessor callable, not the resolved value
+            if o.name not in self._values and o.name not in self._parsed:
+                ctx = f" while instantiating '{context}'" if context else ""
+                raise UnknownPlaceholderError(
+                    f"Unknown placeholder '{o.name}' referenced{ctx}."
+                )
+            return self.aio.__getattr__(o.name)
+
         if isinstance(o, _WiredRef):
             # Ensure placeholder was defined in spec
             if o.name not in self._values and o.name not in self._parsed:
@@ -366,5 +381,33 @@ class AioAccessor:
                     name, lambda: self._wiring._instantiate_impl(name)
                 ),
             )
+
+        return _get
+
+
+@final
+class CompiledAio:
+    """Async accessor wrapper for compiled containers.
+
+    Wraps a compiled container's sync methods with async access.
+    Cached values are returned directly; uncached values are resolved
+    via ``run_in_executor`` to avoid blocking the event loop.
+    """
+
+    def __init__(self, compiled: object) -> None:
+        self._compiled = compiled
+
+    def __getattr__(self, name: str) -> Callable[[], Awaitable[object]]:
+        """Return an async callable for the named accessor."""
+        method: Callable[[], object] = cast(
+            Callable[[], object], getattr(self._compiled, name)
+        )
+        cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
+
+        async def _get() -> object:
+            if hasattr(self._compiled, cache_attr):
+                return cast(object, getattr(self._compiled, cache_attr))
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, method)
 
         return _get
