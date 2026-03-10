@@ -230,19 +230,25 @@ def __getattr__(self, name: str):
 
 #### Placeholder Resolution
 
-Strings like `{name}` are converted to `_WiredRef` markers during parsing:
+Strings like `{name}` are converted to `_WiredRef` markers during parsing, and `{aio.name}` to `_AioWiredRef` markers:
 
 ```python
 class _WiredRef:
     __slots__ = ("name",)
 
+class _AioWiredRef:
+    __slots__ = ("name",)
+
 def _resolve(self, obj):
     if isinstance(obj, str) and self._is_placeholder(obj):
+        ref_name = self._extract_placeholder_name(obj)
+        if ref_name.startswith("aio."):
+            return _AioWiredRef(ref_name[4:])
         return _WiredRef(ref_name)
     return obj
 ```
 
-At instantiation time, `_WiredRef` markers are resolved to actual objects.
+At instantiation time, `_WiredRef` markers are resolved to actual objects, and `_AioWiredRef` markers are resolved to async accessor callables.
 
 #### Thread Safety
 

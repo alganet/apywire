@@ -81,12 +81,9 @@ class CircularWiringError(WiringError):
             if start not in visited:
                 cyc = dfs(start)
                 if cyc:
-                    return cls(
-                        f"Circular dependency detected: {
-                            ', '.join(unprocessed)
-                        }; "
-                        f"cycle: {' -> '.join(cyc)}"
-                    )
+                    return cls(f"Circular dependency detected: {
+                        ', '.join(unprocessed)
+                    }; " f"cycle: {' -> '.join(cyc)}")
 
         return cls(f"Circular dependency detected: {', '.join(unprocessed)}")
 

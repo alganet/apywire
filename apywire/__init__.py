@@ -12,7 +12,14 @@ from .exceptions import (
     WiringError,
 )
 from .generator import Generator
-from .runtime import Accessor, AioAccessor, Spec, SpecEntry, WiringRuntime
+from .runtime import (
+    Accessor,
+    AioAccessor,
+    CompiledAio,
+    Spec,
+    SpecEntry,
+    WiringRuntime,
+)
 from .threads import ThreadSafeMixin
 from .wiring import WiringBase
 
@@ -32,5 +39,6 @@ __all__ = [
     "LockUnavailableError",
     "Accessor",
     "AioAccessor",
+    "CompiledAio",
     "Generator",
 ]

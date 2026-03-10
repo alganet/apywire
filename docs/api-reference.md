@@ -61,6 +61,12 @@ Comprehensive API documentation for apywire.
     options:
       show_source: false
 
+### CompiledAio
+
+::: apywire.CompiledAio
+    options:
+      show_source: false
+
 ## Type Aliases
 
 ### Spec

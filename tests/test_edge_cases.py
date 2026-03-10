@@ -208,9 +208,12 @@ def test_compile_constant_aio() -> None:
     code = WiringCompiler(
         cast(Spec, {"const": 42}), thread_safe=False
     ).compile(aio=True)
-    # Verify it contains an async def for the constant
-    assert "async def const(self):" in code
+    # aio=True keeps sync methods; constant is still sync def
+    assert "def const(self):" in code
     assert "return 42" in code
+    # aio features are present
+    assert "cached_property" in code
+    assert "CompiledAio" in code
 
 
 def test_compile_aio_threaded_full_output() -> None:
@@ -236,12 +239,12 @@ def test_compile_aio_threaded_full_output() -> None:
     mode = black.FileMode(line_length=79 - 12)  # Match test_compile_aio.py
     formatted_code = black.format_str(code, mode=mode)
 
-    expected = dedent(
-        """\
+    expected = dedent("""\
         from apywire.exceptions import LockUnavailableError
         from apywire.threads import ThreadSafeMixin
-        import asyncio
         import datetime
+        from functools import cached_property
+        from apywire.runtime import CompiledAio
 
 
         class Compiled(ThreadSafeMixin):
@@ -249,35 +252,29 @@ def test_compile_aio_threaded_full_output() -> None:
             def __init__(self):
                 self._init_thread_safety()
 
-            async def birthday(self):
+            def birthday(self):
                 if not hasattr(self, "_birthday"):
-                    __val_day = 25
-                    __val_month = 12
-                    __val_year = 1990
-                    loop = asyncio.get_running_loop()
-                    self._birthday = await loop.run_in_executor(
-                        None,
-                        lambda: self._instantiate_attr(
-                            "birthday",
-                            lambda: datetime.datetime(
-                                day=__val_day,
-                                month=__val_month,
-                                year=__val_year,
-                            ),
+                    self._birthday = self._instantiate_attr(
+                        "birthday",
+                        lambda: datetime.datetime(
+                            day=25, month=12, year=1990
                         ),
                     )
                 return self._birthday
 
+            @cached_property
+            def aio(self):
+                return CompiledAio(self)
+
 
         compiled = Compiled()
-        """
-    )
+        """)
 
     assert formatted_code == expected
 
 
 def test_compile_complex_ast_replacement() -> None:
-    """Test _replace_awaits_with_locals with complex structures."""
+    """Test compile(aio=True) with complex nested structures."""
     import sys
     from types import ModuleType
 
@@ -300,9 +297,11 @@ def test_compile_complex_ast_replacement() -> None:
         }
         code = WiringCompiler(spec, thread_safe=False).compile(aio=True)
 
-        assert "async def root(self):" in code
-        assert "__val_1 =" in code
-        assert "await self.leaf()" in code
+        # Methods are sync def with aio=True (additive)
+        assert "def root(self):" in code
+        assert "def leaf(self):" in code
+        # Sync refs use self.name() calls
+        assert "self.leaf()" in code
 
     finally:
         del sys.modules["complex_ast"]
@@ -429,7 +428,7 @@ def test_aio_accessor_unknown_attribute() -> None:
 
 
 def test_compile_ast_recursion_call_tuple() -> None:
-    """Test _replace_awaits_with_locals recursion into Call args and Tuple."""
+    """Test _astify recursion into Call args and Tuple."""
     import sys
     from types import ModuleType
 
@@ -447,16 +446,13 @@ def test_compile_ast_recursion_call_tuple() -> None:
             "ast_rec.func caller": {"x": ["{leaf}"]},  # List
             "ast_rec.func leaf": {},
         }
-        # We want to trigger recursion in _replace_awaits_with_locals.
-        # It recurses on Call, Dict, List, Tuple.
-        # wired.compile calls _astify which produces these nodes.
-        # Then _replace_awaits_with_locals traverses them.
+        # _astify recurses on Call, Dict, List, Tuple nodes.
 
         code = WiringCompiler(spec, thread_safe=False).compile(aio=True)
 
-        # Verify code generation handles AST recursion correctly
-        assert "async def wrapper(self):" in code
-        assert "async def caller(self):" in code
+        # aio=True generates sync def methods (additive)
+        assert "def wrapper(self):" in code
+        assert "def caller(self):" in code
 
     finally:
         del sys.modules["ast_rec"]

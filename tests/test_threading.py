@@ -607,14 +607,26 @@ def test_compiled_thread_safe_singleton_instantiation_async() -> None:
         pythonCode = apywire.WiringCompiler(spec, thread_safe=False).compile(
             aio=True, thread_safe=True
         )
-        execd: dict[str, object] = {}
+        from typing import Awaitable, Callable, Protocol
+
+        class _DynAccessor(Protocol):
+            def __getattr__(
+                self, name: str
+            ) -> Callable[[], Awaitable[object]]: ...
+
+        class _Compiled(Protocol):
+            @property
+            def aio(self) -> _DynAccessor: ...
+
+        execd: dict[str, _Compiled] = {}
         exec(pythonCode, execd)
-        compiled_obj = cast(AsyncSingletonProtocol, execd["compiled"])
+        compiled_obj = execd["compiled"]
 
         SomeClass.inst_count = 0
 
+        # Use .aio for async access
         async def call_singleton() -> object:
-            return await compiled_obj.singleton()
+            return await compiled_obj.aio.singleton()
 
         async def run_all() -> list[object]:
             tasks = [asyncio.create_task(call_singleton()) for _ in range(8)]

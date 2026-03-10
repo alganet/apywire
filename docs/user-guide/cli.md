@@ -210,14 +210,21 @@ max_size = 100
 
 ### --aio
 
-Generates async accessors that use `asyncio.run_in_executor`:
+Adds async support via a `.aio` cached property (`CompiledAio` wrapper). All methods remain sync `def`; async access is provided through `compiled.aio.name()`:
 
 ```python
-async def now(self):
-    if not hasattr(self, '_now'):
-        loop = asyncio.get_running_loop()
-        self._now = await loop.run_in_executor(None, lambda: datetime.datetime(...))
-    return self._now
+from functools import cached_property
+from apywire.runtime import CompiledAio
+
+class Compiled:
+    def now(self):
+        if not hasattr(self, '_now'):
+            self._now = datetime.datetime(...)
+        return self._now
+
+    @cached_property
+    def aio(self):
+        return CompiledAio(self)
 ```
 
 ### --thread-safe
