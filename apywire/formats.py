@@ -9,6 +9,7 @@ from __future__ import annotations
 import configparser
 import json
 from types import ModuleType
+from collections.abc import Mapping
 from typing import cast
 
 from apywire.exceptions import FormatError
@@ -151,7 +152,10 @@ def ini_to_spec(content: str) -> Spec:
                 value = config[section][key]
                 parsed = _parse_ini_value(value)
                 section_dict[key] = cast(_ConstantValue, parsed)
-            spec[section] = cast(_SpecMapping, section_dict)
+            spec[section] = cast(
+                _SpecMapping,
+                _convert_numeric_keys(section_dict),
+            )
     return spec
 
 
@@ -181,7 +185,10 @@ def spec_to_toml(spec: Spec) -> str:
         raise FormatError("toml", "TOML output requires tomli_w.")
     toml_dict: dict[str, object] = {}
     for key, value in spec.items():
-        toml_dict[key] = value
+        if isinstance(value, dict):
+            toml_dict[key] = _stringify_int_keys(value)
+        else:
+            toml_dict[key] = value
     result: str = _tomli_w.dumps(toml_dict)
     return result
 
@@ -219,10 +226,48 @@ def toml_to_spec(content: str) -> Spec:
     spec: Spec = {}
     for key, value in data.items():
         if isinstance(value, dict):
-            spec[key] = cast(_SpecMapping, value)
+            spec[key] = cast(_SpecMapping, _convert_numeric_keys(value))
         else:
             spec[key] = cast(_ConstantValue, value)
     return spec
+
+
+def _stringify_int_keys(
+    d: Mapping[str | int, object],
+) -> dict[str, object]:
+    """Convert top-level integer keys back to strings for serialization.
+
+    The inverse of ``_convert_numeric_keys``. Only converts the
+    top level — nested dicts are left unchanged because only
+    top-level int keys represent positional arguments.
+    """
+    return {str(k): v for k, v in d.items()}
+
+
+def _convert_numeric_keys(
+    d: Mapping[str | int, object],
+) -> dict[str | int, object]:
+    """Convert top-level numeric string keys to integers.
+
+    File formats (TOML, JSON, INI) use string keys, but apywire
+    uses integer keys for positional arguments. This converts
+    keys like ``"0"``, ``"1"`` to ``0``, ``1``.
+
+    Only converts the top level of the dict — nested dicts keep
+    their string keys, since ``_separate_args_kwargs`` only checks
+    the top level for positional vs keyword argument dispatch.
+    """
+    result: dict[str | int, object] = {}
+    for k, v in d.items():
+        # Only convert canonical decimal representations (no leading
+        # zeros) to avoid "00"/"01" silently colliding with "0"/"1".
+        new_key: str | int
+        if isinstance(k, str) and k.isdigit() and str(int(k)) == k:
+            new_key = int(k)
+        else:
+            new_key = k
+        result[new_key] = v
+    return result
 
 
 def spec_to_json(spec: Spec) -> str:
@@ -264,8 +309,24 @@ def json_to_spec(content: str) -> Spec:
         2025
     """
     try:
-        result: Spec = json.loads(content)
+        raw: object = json.loads(content)
     except Exception as e:
-        raise FormatError("json", f"Failed to parse JSON content: {e}") from e
+        raise FormatError(
+            "json", f"Failed to parse JSON content: {e}"
+        ) from e
 
-    return result
+    if not isinstance(raw, dict):
+        raise FormatError(
+            "json",
+            "JSON root must be an object, "
+            f"got {type(raw).__name__}",
+        )
+
+    data: dict[str, object] = raw
+    spec: Spec = {}
+    for key, value in data.items():
+        if isinstance(value, dict):
+            spec[key] = cast(_SpecMapping, _convert_numeric_keys(value))
+        else:
+            spec[key] = cast(_ConstantValue, value)
+    return spec
