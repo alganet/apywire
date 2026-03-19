@@ -6,6 +6,7 @@
 
 import sys
 from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -244,16 +245,16 @@ def test_compilation_with_placeholders() -> None:
     assert "db_url" in code
     assert "postgresql://localhost:5432/mydb" in code
 
-    # Auto-promoted constants are NOT compiled
-    # (they require runtime interpolation with wired objects)
-    assert "def message" not in code
+    # Auto-promoted constants ARE compiled as f-string accessors
+    assert "def message" in code
 
-    # Execute compiled code
+    # Execute compiled code and verify promoted constant works
     namespace: dict[str, object] = {}
-    exec(code, namespace)
-
-    # Verify compiled code works (auto-promoted constants are skipped)
-    # Dynamic access not fully type-checked by mypy for exec'd code
+    exec(code, namespace)  # noqa: S102
+    compiled = namespace["compiled"]
+    msg = str(getattr(compiled, "message")())  # type: ignore[misc]
+    assert "postgresql://localhost:5432/mydb" in msg
+    assert "2025" in msg
 
 
 def test_interpolate_placeholders_unknown_placeholder() -> None:
@@ -270,6 +271,76 @@ def test_interpolate_placeholders_unknown_placeholder() -> None:
         wired._interpolate_placeholders(
             "Test {unknown}", {"base": "value"}, "test"
         )
+
+
+def test_list_constant_with_wired_refs() -> None:
+    """Test that list constants containing wired refs resolve correctly."""
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, Wiring
+
+    class Handler:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def __repr__(self) -> str:
+            return f"Handler({self.name})"
+
+    mod = ModuleType("test_list_wired")
+    mod.Handler = Handler  # type: ignore[attr-defined]
+    sys.modules["test_list_wired"] = mod
+
+    try:
+        spec: Spec = {
+            "test_list_wired.Handler h1": {"name": "first"},
+            "test_list_wired.Handler h2": {"name": "second"},
+            "handlers": ["{h1}", "{h2}"],
+        }
+        wired = Wiring(spec, thread_safe=False)
+
+        # List should be auto-promoted (not in _values at init)
+        assert "handlers" in wired._parsed
+
+        # Accessing it should resolve to a list of Handler instances
+        result = wired.handlers()
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert cast(Handler, result[0]).name == "first"
+        assert cast(Handler, result[1]).name == "second"
+    finally:
+        del sys.modules["test_list_wired"]
+
+
+def test_dict_constant_with_wired_refs() -> None:
+    """Test that dict constants containing wired refs resolve correctly."""
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, Wiring
+
+    class Service:
+        def __init__(self, url: str) -> None:
+            self.url = url
+
+    mod = ModuleType("test_dict_wired")
+    mod.Service = Service  # type: ignore[attr-defined]
+    sys.modules["test_dict_wired"] = mod
+
+    try:
+        spec: Spec = {
+            "test_dict_wired.Service db": {"url": "postgres://localhost"},
+            "test_dict_wired.Service cache": {"url": "redis://localhost"},
+            "services": {"database": "{db}", "cache": "{cache}"},
+        }
+        wired = Wiring(spec, thread_safe=False)
+
+        result = wired.services()
+        assert isinstance(result, dict)
+        assert cast(Service, result["database"]).url == "postgres://localhost"
+        assert cast(Service, result["cache"]).url == "redis://localhost"
+    finally:
+        del sys.modules["test_dict_wired"]
 
 
 def test_transitive_promotion_of_constants() -> None:

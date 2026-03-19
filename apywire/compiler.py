@@ -14,6 +14,7 @@ from typing import cast
 
 from apywire.constants import (
     CACHE_ATTR_PREFIX,
+    PLACEHOLDER_REGEX,
     SYNTHETIC_CONST,
 )
 from apywire.wiring import (
@@ -258,9 +259,7 @@ class WiringCompiler(WiringBase):
 
         if not thread_safe:
             assign_cache = self._create_cache_assignment(cache_attr, call)
-            if_stmt = ast.If(
-                test=has_check, body=[assign_cache], orelse=[]
-            )
+            if_stmt = ast.If(test=has_check, body=[assign_cache], orelse=[])
             func_def = ast.FunctionDef(
                 name=name,
                 args=_PROPERTY_ARGS,
@@ -282,9 +281,7 @@ class WiringCompiler(WiringBase):
                 args=[ast.Constant(value=name), maker],
                 keywords=[],
             )
-            assign_cache = self._create_cache_assignment(
-                cache_attr, call_inst
-            )
+            assign_cache = self._create_cache_assignment(cache_attr, call_inst)
             func_def = ast.FunctionDef(
                 name=name,
                 args=_PROPERTY_ARGS,
@@ -320,6 +317,119 @@ class WiringCompiler(WiringBase):
             type_comment=None,
             type_params=[],
         )
+
+    def _astify_interpolated_string(self, template: str) -> ast.expr:
+        """Build an AST f-string from a template with placeholders.
+
+        Turns ``"Hello {name}"`` into ``f"Hello {str(self.name())}"``.
+        Each ``{ref}`` becomes a ``FormattedValue`` calling the
+        accessor and converting to ``str()``.
+        """
+        parts: list[ast.expr | ast.Constant] = []
+        last_end = 0
+        for match in PLACEHOLDER_REGEX.finditer(template):
+            # Add literal text before this placeholder
+            if match.start() > last_end:
+                parts.append(ast.Constant(template[last_end : match.start()]))
+            # Add formatted value: str(self.name())
+            ref_name = match.group(1)
+            accessor_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="self", ctx=ast.Load()),
+                    attr=ref_name,
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+            str_call = ast.Call(
+                func=ast.Name(id="str", ctx=ast.Load()),
+                args=[accessor_call],
+                keywords=[],
+            )
+            parts.append(
+                ast.FormattedValue(
+                    value=str_call,
+                    conversion=-1,
+                    format_spec=None,
+                )
+            )
+            last_end = match.end()
+        # Add trailing literal
+        if last_end < len(template):
+            parts.append(ast.Constant(template[last_end:]))
+        return ast.JoinedStr(values=parts)
+
+    def _compile_promoted_constant(
+        self,
+        name: str,
+        data: _ResolvedValue,
+        *,
+        thread_safe: bool = False,
+    ) -> ast.FunctionDef:
+        """Build an AST FunctionDef for an auto-promoted constant.
+
+        Auto-promoted constants are values (strings, lists, dicts)
+        that reference wired objects via placeholders. They are
+        compiled as cached accessors that resolve wired refs at
+        call time.
+        """
+        if isinstance(data, str):
+            value_expr = self._astify_interpolated_string(data)
+        else:
+            value_expr = self._astify(data)
+        cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
+        has_check = self._create_cache_check(cache_attr)
+        return_stmt = self._create_return_statement(cache_attr)
+
+        if not thread_safe:
+            assign_cache = self._create_cache_assignment(
+                cache_attr, value_expr
+            )
+            return ast.FunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=[
+                    ast.If(
+                        test=has_check,
+                        body=[assign_cache],
+                        orelse=[],
+                    ),
+                    return_stmt,
+                ],
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
+        else:
+            maker = self._create_lambda_function(value_expr)
+            call_inst = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="self", ctx=ast.Load()),
+                    attr="_instantiate_attr",
+                    ctx=ast.Load(),
+                ),
+                args=[ast.Constant(value=name), maker],
+                keywords=[],
+            )
+            assign_cache = self._create_cache_assignment(cache_attr, call_inst)
+            return ast.FunctionDef(
+                name=name,
+                args=_PROPERTY_ARGS,
+                body=[
+                    ast.If(
+                        test=has_check,
+                        body=[assign_cache],
+                        orelse=[],
+                    ),
+                    return_stmt,
+                ],
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+                type_params=[],
+            )
 
     def compile(self, *, aio: bool = False, thread_safe: bool = False) -> str:
         """Compiles the Spec into a string containing Python code.
@@ -423,9 +533,7 @@ class WiringCompiler(WiringBase):
         for cname, cvalue in constant_names.items():
             cache_attr = f"{CACHE_ATTR_PREFIX}{cname}"
             init_body.append(
-                self._create_cache_assignment(
-                    cache_attr, ast.Constant(cvalue)
-                )
+                self._create_cache_assignment(cache_attr, ast.Constant(cvalue))
             )
         if init_body:
             init_def = ast.FunctionDef(
@@ -439,12 +547,19 @@ class WiringCompiler(WiringBase):
             class_body.insert(0, init_def)
 
         for name, entry in self._parsed.items():
-            # Skip synthetic auto-promoted constants
-            # These require runtime interpolation and can't be pre-computed
             if (
                 entry.module_name == SYNTHETIC_CONST
                 and entry.class_name == "str"
             ):
+                # Auto-promoted constant with wired refs.
+                # Compile as a cached accessor that resolves refs.
+                class_body.append(
+                    self._compile_promoted_constant(
+                        name,
+                        entry.data,
+                        thread_safe=thread_safe,
+                    )
+                )
                 continue
 
             class_body.append(

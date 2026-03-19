@@ -254,3 +254,94 @@ class TestFormatErrorHandling:
         finally:
             # Restore tomli_w
             apywire.formats._tomli_w = original_tomli_w
+
+
+class TestNumericKeyConversion:
+    """Tests for numeric key conversion across formats."""
+
+    @pytest.mark.parametrize(
+        "from_format, content",
+        [
+            (
+                toml_to_spec,
+                '["datetime.datetime dt"]\n0 = 2025\n1 = 6\n2 = 15\n',
+            ),
+            (
+                json_to_spec,
+                '{"datetime.datetime dt": {"0": 2025, "1": 6, "2": 15}}',
+            ),
+            (
+                ini_to_spec,
+                "[datetime.datetime dt]\n0 = 2025\n1 = 6\n2 = 15\n",
+            ),
+        ],
+        ids=["toml", "json", "ini"],
+    )
+    def test_top_level_numeric_keys_become_ints(
+        self, from_format: Callable[[str], Spec], content: str
+    ) -> None:
+        """Top-level numeric keys become int for positional args."""
+        spec = from_format(content)
+        entry = spec["datetime.datetime dt"]
+        assert isinstance(entry, dict)
+        assert 0 in entry
+        assert 1 in entry
+        assert 2 in entry
+        assert entry[0] == 2025
+
+    @pytest.mark.parametrize(
+        "from_format, content",
+        [
+            (
+                toml_to_spec,
+                '["myapp.Config cfg"]\n'
+                'codes = {"404" = "not found", "500" = "server error"}\n',
+            ),
+            (
+                json_to_spec,
+                '{"myapp.Config cfg": {"codes":'
+                ' {"404": "not found",'
+                ' "500": "server error"}}}',
+            ),
+        ],
+        ids=["toml", "json"],
+    )
+    def test_nested_numeric_keys_stay_strings(
+        self, from_format: Callable[[str], Spec], content: str
+    ) -> None:
+        """Nested numeric keys stay as strings."""
+        spec = from_format(content)
+        entry = spec["myapp.Config cfg"]
+        assert isinstance(entry, dict)
+        codes = entry["codes"]
+        assert isinstance(codes, dict)
+        # Nested keys should remain strings
+        assert "404" in codes
+        assert "500" in codes
+        assert 404 not in codes
+
+    def test_leading_zero_keys_stay_strings(self) -> None:
+        """Keys with leading zeros must not be converted."""
+        spec = toml_to_spec(
+            '["myapp.Config cfg"]\n'
+            '00 = "a"\n'
+            '01 = "b"\n'
+            '0 = "c"\n'
+        )
+        entry = spec["myapp.Config cfg"]
+        assert isinstance(entry, dict)
+        # "0" is canonical → converted to int
+        assert 0 in entry
+        # "00" and "01" have leading zeros → stay strings
+        assert "00" in entry
+        assert "01" in entry
+
+    def test_json_root_must_be_object(self) -> None:
+        """json_to_spec raises FormatError for non-object roots."""
+        from apywire.exceptions import FormatError
+
+        with pytest.raises(FormatError, match="root must be an object"):
+            json_to_spec("[1, 2, 3]")
+
+        with pytest.raises(FormatError, match="root must be an object"):
+            json_to_spec('"just a string"')

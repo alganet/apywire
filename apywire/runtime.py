@@ -198,10 +198,15 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
 
         # Check for synthetic auto-promoted constant
         if entry.module_name == SYNTHETIC_CONST and entry.class_name == "str":
-            # This is an auto-promoted constant with string interpolation
-            value = self._format_string_constant(entry.data, context=name)
-            self._values[name] = value
-            return value
+            result: _RuntimeValue
+            if isinstance(entry.data, str):
+                # String template with interpolation
+                result = self._format_string_constant(entry.data, context=name)
+            else:
+                # Non-string (list, dict, tuple) with wired refs
+                result = self._resolve_runtime(entry.data, context=name)
+            self._values[name] = result
+            return result
 
         module = importlib.import_module(entry.module_name)
         cls = cast(_Constructor, getattr(module, entry.class_name))
