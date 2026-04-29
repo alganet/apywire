@@ -48,6 +48,8 @@ dev = [
     "mkdocs",
     "mkdocstrings[python]",
     "mypy",
+    "pygments>=2.20",
+    "pymdown-extensions>=10.21.2",
     "pytest-cov",
     "pytest",
     "reuse",
