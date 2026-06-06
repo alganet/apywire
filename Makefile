@@ -26,7 +26,7 @@ format:
 lint:
 	uv run reuse lint
 	uv run flake8 apywire tests
-	uv run mypy apywire tests
+	uv run mypy --no-sqlite-cache apywire tests
 
 test:
 	uv run pytest -q

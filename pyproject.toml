@@ -47,7 +47,7 @@ dev = [
     "mkdocs-material",
     "mkdocs",
     "mkdocstrings[python]",
-    "mypy",
+    "mypy>=2.1",
     "pygments>=2.20",
     "pymdown-extensions>=10.21.2",
     "pytest-cov",

@@ -23,6 +23,8 @@ from apywire.formats import (
 from apywire.generator import Generator
 from apywire.wiring import Spec
 
+_FORMAT_CHOICES: tuple[str, ...] = ("ini", "toml", "json")
+
 
 def cmd_generate(args: argparse.Namespace) -> int:
     """Handle the generate command."""
@@ -128,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     generate_parser.add_argument(
         "--format",
         required=True,
-        choices=["ini", "toml", "json"],
+        choices=_FORMAT_CHOICES,
         metavar="FORMAT",
         help="Output format: ini, toml, or json (required)",
     )
@@ -158,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     compile_parser.add_argument(
         "--format",
         required=True,
-        choices=["ini", "toml", "json"],
+        choices=_FORMAT_CHOICES,
         metavar="FORMAT",
         help="Input format: ini, toml, or json (required)",
     )
