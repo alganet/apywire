@@ -464,6 +464,92 @@ def test_optimistic_instantiation_exception_wrapping(
             del sys.modules["mymod_fail_opt"]
 
 
+def test_instantiation_error_parity_across_thread_modes() -> None:
+    """A construction failure produces the same error in both thread modes.
+
+    Regression: thread-safe mode used to double-wrap the WiringError raised
+    by the non-thread-safe instantiation path, yielding a different message
+    and cause chain. Both modes must now report identical context.
+    """
+
+    class FailingClass:
+        def __init__(self) -> None:
+            raise ValueError("kaboom")
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("mymod_err_parity")
+            self.FailingClass = FailingClass
+
+    mod = MockModule()
+    sys.modules["mymod_err_parity"] = mod
+    try:
+        spec: apywire.Spec = {"mymod_err_parity.FailingClass obj": {}}
+
+        results: dict[bool, tuple[str, type[BaseException] | None]] = {}
+        for thread_safe in (False, True):
+            wired: apywire.Wiring = apywire.Wiring(
+                spec, thread_safe=thread_safe
+            )
+            with pytest.raises(apywire.WiringError) as exc_info:
+                _ = wired.obj()
+            e = exc_info.value
+            cause = e.__cause__
+            results[thread_safe] = (
+                str(e),
+                type(cause) if cause is not None else None,
+            )
+
+        # Identical message and cause type regardless of thread_safe.
+        assert results[False] == results[True]
+        message, cause_type = results[True]
+        assert "failed to instantiate 'obj'" in message
+        assert "kaboom" in message
+        assert cause_type is ValueError
+    finally:
+        if "mymod_err_parity" in sys.modules:
+            del sys.modules["mymod_err_parity"]
+
+
+@pytest.mark.parametrize(
+    "spec_key, expected_cause",
+    [
+        # Missing module: importlib raises ModuleNotFoundError.
+        ("no_such_module_xyz.Thing obj", ModuleNotFoundError),
+        # Missing class on an existing module: getattr raises AttributeError.
+        ("os.NoSuchClassXyz obj", AttributeError),
+    ],
+)
+def test_import_failure_error_parity_across_thread_modes(
+    spec_key: str, expected_cause: type[BaseException]
+) -> None:
+    """Import/attribute lookup failures wrap identically in both modes.
+
+    Failures before the constructor call (missing module, missing class or
+    factory method) are now wrapped into a WiringError with the same context
+    in thread-safe and non-thread-safe modes, instead of propagating raw in
+    one mode and generically wrapped in the other.
+    """
+    spec: apywire.Spec = {spec_key: {}}
+
+    results: dict[bool, tuple[str, type[BaseException] | None]] = {}
+    for thread_safe in (False, True):
+        wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=thread_safe)
+        with pytest.raises(apywire.WiringError) as exc_info:
+            _ = wired.obj()
+        e = exc_info.value
+        cause = e.__cause__
+        results[thread_safe] = (
+            str(e),
+            type(cause) if cause is not None else None,
+        )
+
+    assert results[False] == results[True]
+    message, cause_type = results[True]
+    assert "failed to instantiate 'obj'" in message
+    assert cause_type is expected_cause
+
+
 def test_release_held_locks_when_no_locks() -> None:
     """Test _release_held_locks early return when no locks are held."""
 
@@ -494,14 +580,18 @@ def test_release_held_locks_when_no_locks() -> None:
             del sys.modules["mymod_no_locks"]
 
 
-def test_wiring_error_rewrapping_in_optimistic_mode(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that WiringError is re-wrapped in optimistic mode."""
+def test_wiring_error_not_double_wrapped_in_optimistic_mode() -> None:
+    """An already-wrapped WiringError is not re-wrapped in optimistic mode.
+
+    A WiringError raised while resolving a dependency is already annotated
+    with the failing attribute's context. Thread-safe (optimistic) mode must
+    re-raise it unchanged rather than wrapping it in a second, less
+    informative WiringError -- otherwise the original message and cause are
+    buried and the thread-safe error differs from the non-thread-safe one.
+    """
 
     class Inner:
         def __init__(self) -> None:
-            # This will cause a WiringError to be raised
             raise apywire.WiringError("Inner instantiation failed")
 
     class Outer:
@@ -523,14 +613,18 @@ def test_wiring_error_rewrapping_in_optimistic_mode(
         }
         wired: apywire.Wiring = apywire.Wiring(spec, thread_safe=True)
 
-        try:
+        with pytest.raises(apywire.WiringError) as exc_info:
             _ = wired.outer()
-            assert False, "Should have raised WiringError"
-        except apywire.WiringError as e:
-            # Should be wrapped with context
-            assert "failed to instantiate" in str(e)
-            # Check the cause chain contains the original error
-            assert e.__cause__ is not None
+
+        e = exc_info.value
+        # The error reports the attribute that actually failed (inner) and
+        # carries the original WiringError as a single-layer cause.
+        assert "failed to instantiate 'inner'" in str(e)
+        assert isinstance(e.__cause__, apywire.WiringError)
+        assert str(e.__cause__) == "Inner instantiation failed"
+        # Not double-wrapped: the cause is the original error, not another
+        # "failed to instantiate" wrapper.
+        assert "failed to instantiate" not in str(e.__cause__)
     finally:
         if "mymod_wiring_err" in sys.modules:
             del sys.modules["mymod_wiring_err"]
