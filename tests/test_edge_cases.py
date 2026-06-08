@@ -663,3 +663,70 @@ def test_runtime_format_string_constant_unknown_placeholder() -> None:
     # Template with unknown placeholder
     with pytest.raises(UnknownPlaceholderError, match="Unknown placeholder"):
         wired._format_string_constant("Value: {unknown}", "test_context")
+
+
+def test_getattr_on_uninitialized_runtime_raises_attribute_error() -> None:
+    """An uninitialized WiringRuntime fails cleanly, not with recursion.
+
+    __getattr__ runs only when normal lookup fails; if it referenced
+    self._parsed/self._values while those are absent (copy, unpickle, or a
+    partially-failed __init__) it would re-enter __getattr__ and recurse
+    forever. It must raise AttributeError instead.
+    """
+    from apywire.runtime import WiringRuntime
+
+    obj = WiringRuntime.__new__(WiringRuntime)
+    for probe in ("foo", "_parsed", "_values"):
+        with pytest.raises(AttributeError):
+            getattr(obj, probe)
+
+
+def test_getattr_on_uninitialized_aio_accessor_raises_attribute_error() -> (
+    None
+):
+    """An uninitialized AioAccessor fails cleanly, not with recursion."""
+    from apywire.runtime import AioAccessor
+
+    obj = AioAccessor.__new__(AioAccessor)
+    for probe in ("foo", "_wiring"):
+        with pytest.raises(AttributeError):
+            getattr(obj, probe)
+
+
+def test_getattr_on_uninitialized_compiled_aio_raises_attribute_error() -> (
+    None
+):
+    """An uninitialized CompiledAio fails cleanly, not with recursion."""
+    from apywire.runtime import CompiledAio
+
+    obj = CompiledAio.__new__(CompiledAio)
+    for probe in ("foo", "_compiled"):
+        with pytest.raises(AttributeError):
+            getattr(obj, probe)
+
+
+def test_underscore_prefixed_wired_name_still_accessible() -> None:
+    """The recursion guard must not block legitimately underscore-named
+    entries, which are resolved through _values at runtime.
+    """
+    import sys
+    from types import ModuleType
+
+    from apywire import Spec, Wiring
+
+    class Thing:
+        def __init__(self) -> None:
+            self.ok = True
+
+    mod = ModuleType("mod_underscore_name")
+    mod.Thing = Thing  # type: ignore[attr-defined]
+    sys.modules["mod_underscore_name"] = mod
+    try:
+        spec: Spec = {"mod_underscore_name.Thing _hidden": {}}
+        wired = Wiring(spec, thread_safe=False)
+        inst = wired._hidden()
+        assert isinstance(inst, Thing)
+        # Cached on second access.
+        assert wired._hidden() is inst
+    finally:
+        del sys.modules["mod_underscore_name"]
