@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 from collections import deque
+from collections.abc import Iterable
 from types import EllipsisType
 from typing import NamedTuple, TypeAlias, cast
 
@@ -163,6 +164,35 @@ class SpecParser:
             )
 
         return module_name, class_name, name, factory_method
+
+    @staticmethod
+    def _validate_positional_keys(
+        name: str, keys: Iterable[str | int]
+    ) -> None:
+        """Ensure positional (integer) argument keys are contiguous from 0.
+
+        Integer keys in an entry's data are positional constructor
+        arguments. They are sorted by index before being passed positionally,
+        so a gap (e.g. ``{0: ..., 2: ...}``) or a non-zero start would
+        silently shift arguments into the wrong slots. Require a contiguous
+        ``0..n-1`` run and raise otherwise.
+
+        Args:
+            name: Exposed entry name, for the error message.
+            keys: The entry's data keys (string keys are ignored).
+
+        Raises:
+            ValueError: If the integer keys are not a contiguous run from 0.
+        """
+        int_keys = sorted(k for k in keys if isinstance(k, int))
+        if not int_keys:
+            return
+        if int_keys != list(range(len(int_keys))):
+            raise ValueError(
+                f"invalid spec entry '{name}': positional argument keys "
+                f"must be a contiguous sequence starting at 0, "
+                f"got {int_keys}"
+            )
 
     @staticmethod
     def _is_spec_constant(value: object) -> bool:
@@ -334,6 +364,14 @@ class WiringBase(SpecParser):
                 None,
                 cast(str | _WiredRef, self._resolve(wired_val)),
             )
+
+        # Validate positional argument keys up front. Synthetic entries carry
+        # constant values rather than argument mappings, so they are skipped.
+        for arg_name, arg_entry in self._parsed.items():
+            if arg_entry.module_name == SYNTHETIC_CONST:
+                continue
+            if isinstance(arg_entry.data, dict):
+                self._validate_positional_keys(arg_name, arg_entry.data)
 
     def _parse_spec_entry(
         self, key: str, value: _SpecMapping | _ConstantValue
