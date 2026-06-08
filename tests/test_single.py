@@ -682,6 +682,48 @@ def test_contiguous_positional_args_are_accepted() -> None:
     assert wired.d() == datetime.date(2023, 10, 27)
 
 
+def test_cache_attribute_collision_raises() -> None:
+    """Two entries differing only by a leading '_' are rejected.
+
+    'foo' caches as '_foo'; an entry literally named '_foo' collides, which
+    silently breaks foo() in compiled and thread-safe containers (the cache
+    lookup shadows the real value). It is rejected at construction.
+    """
+    spec: apywire.Spec = {
+        "datetime.date foo": {0: 2023, 1: 1, 2: 1},
+        "datetime.date _foo": {0: 2024, 1: 2, 2: 2},
+    }
+    with pytest.raises(ValueError, match="collides with another entry"):
+        apywire.Wiring(spec, thread_safe=False)
+
+
+def test_cache_attribute_collision_with_constant_raises() -> None:
+    """The collision is detected against constants too."""
+    spec: apywire.Spec = {
+        "datetime.date foo": {0: 2023, 1: 1, 2: 1},
+        "_foo": 42,
+    }
+    with pytest.raises(ValueError, match="collides with another entry"):
+        apywire.Wiring(spec, thread_safe=False)
+
+
+def test_cache_attribute_collision_rejected_by_compiler_too() -> None:
+    """The compiler rejects the colliding spec at construction as well."""
+    spec: apywire.Spec = {
+        "datetime.date foo": {0: 2023, 1: 1, 2: 1},
+        "datetime.date _foo": {0: 2024, 1: 2, 2: 2},
+    }
+    with pytest.raises(ValueError, match="collides with another entry"):
+        apywire.WiringCompiler(spec)
+
+
+def test_underscore_name_without_collision_is_allowed() -> None:
+    """A lone underscore-prefixed entry (no bare counterpart) is fine."""
+    spec: apywire.Spec = {"datetime.date _only": {0: 2023, 1: 1, 2: 1}}
+    wired = apywire.Wiring(spec, thread_safe=False)
+    assert wired._only() == datetime.date(2023, 1, 1)
+
+
 def test_unknown_placeholder_exception_during_creation() -> None:
     """If creating a referenced attribute raises AttributeError, the
     resolution should translate that into a meaningful 'unknown
