@@ -152,6 +152,37 @@ wired = Wiring(spec)
 dt = wired.dt()  # datetime.datetime(2025, 1, 1, hour=12, minute=30)
 ```
 
+### Positional Argument Keys Must Be Contiguous
+
+Numeric keys are positional arguments and must form a contiguous run
+starting at `0` (`0, 1, 2, …`). A gap or a non-zero start would silently
+shift arguments into the wrong slots, so it is rejected when the container
+is created:
+
+```python
+# ❌ Raises ValueError: missing index 1 would shift the arguments
+Wiring({"datetime.date d": {0: 2023, 2: 27}})
+```
+
+## Reserved Names
+
+Each wired entry caches its instantiated value under an attribute prefixed
+with an underscore (`foo` caches as `_foo`). Because of this, **two entries
+whose names differ only by a leading underscore are not allowed** — naming
+one entry `foo` and another `_foo` would make `foo`'s cache collide with the
+`_foo` entry. This is rejected when the container is created:
+
+```python
+# ❌ Raises ValueError: '_foo' collides with the cache attribute of 'foo'
+Wiring({
+    "myapp.A foo": {},
+    "myapp.B _foo": {},
+})
+```
+
+A single underscore-prefixed name on its own (with no bare counterpart) is
+fine.
+
 ## Complex Nested Dependencies
 
 ### Deep Dependency Chains

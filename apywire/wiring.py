@@ -23,6 +23,7 @@ from types import EllipsisType
 from typing import NamedTuple, TypeAlias, cast
 
 from apywire.constants import (
+    CACHE_ATTR_PREFIX,
     PLACEHOLDER_END,
     PLACEHOLDER_REGEX,
     PLACEHOLDER_START,
@@ -193,6 +194,35 @@ class SpecParser:
                 f"must be a contiguous sequence starting at 0, "
                 f"got {int_keys}"
             )
+
+    @staticmethod
+    def _validate_no_cache_collisions(exposed: set[str]) -> None:
+        """Reject names that collide with another entry's cache attribute.
+
+        Wired and promoted-constant entries cache their instantiated value
+        under ``<CACHE_ATTR_PREFIX><name>`` (e.g. ``foo`` caches as ``_foo``).
+        If another entry is literally named ``_foo`` it collides: in compiled
+        and thread-safe containers the cache lookup (``hasattr(self, '_foo')``
+        or the generated ``_foo`` method) shadows the real value, so ``foo()``
+        silently returns the wrong object. Plain runtime keys by name and is
+        unaffected, which makes the failure a runtime/compiled divergence.
+        Reject the ambiguity up front, in every mode.
+
+        Args:
+            exposed: All exposed entry names (wired, constant and promoted).
+
+        Raises:
+            ValueError: If two names differ only by a leading cache prefix.
+        """
+        for name in sorted(exposed):
+            cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
+            if cache_attr in exposed:
+                raise ValueError(
+                    f"spec entry '{name}' caches as '{cache_attr}', which "
+                    f"collides with another entry named '{cache_attr}'; "
+                    f"names differing only by a leading "
+                    f"'{CACHE_ATTR_PREFIX}' are not allowed."
+                )
 
     @staticmethod
     def _is_spec_constant(value: object) -> bool:
@@ -372,6 +402,11 @@ class WiringBase(SpecParser):
                 continue
             if isinstance(arg_entry.data, dict):
                 self._validate_positional_keys(arg_name, arg_entry.data)
+
+        # Reject names that collide with another entry's cache attribute.
+        self._validate_no_cache_collisions(
+            set(self._parsed) | set(self._values)
+        )
 
     def _parse_spec_entry(
         self, key: str, value: _SpecMapping | _ConstantValue
