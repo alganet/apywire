@@ -208,18 +208,29 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
             self._values[name] = result
             return result
 
-        module = importlib.import_module(entry.module_name)
-        cls = cast(_Constructor, getattr(module, entry.class_name))
+        # Resolving the module, class and factory method is part of THIS
+        # attribute's instantiation, so any failure here (missing module,
+        # class or factory method) is wrapped with this attribute's name.
+        # Wrapping these consistently makes thread-safe and non-thread-safe
+        # modes report identical errors for every failure mode.
+        try:
+            module = importlib.import_module(entry.module_name)
+            cls = cast(_Constructor, getattr(module, entry.class_name))
 
-        # If a factory method is specified, get it from the class
-        if entry.factory_method:
-            constructor = cast(
-                _Constructor, getattr(cls, entry.factory_method)
-            )
-        else:
-            constructor = cls
+            # If a factory method is specified, get it from the class
+            if entry.factory_method:
+                constructor = cast(
+                    _Constructor, getattr(cls, entry.factory_method)
+                )
+            else:
+                constructor = cls
+        except Exception as e:
+            raise WiringError(f"failed to instantiate '{name}': {e}") from e
 
-        # Resolve arguments
+        # Resolve arguments. Nested instantiation failures surface here as
+        # WiringErrors that already name the dependency that failed; let them
+        # propagate unchanged rather than re-wrapping them with this
+        # attribute's name (which would bury the real origin).
         kwargs = self._resolve_runtime(entry.data, context=name)
 
         try:

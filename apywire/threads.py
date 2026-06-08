@@ -113,16 +113,20 @@ class ThreadSafeMixin:
         This helper method provides consistent error wrapping for all
         instantiation paths, avoiding code duplication.
 
+        A `WiringError` (including its `UnknownPlaceholderError` and
+        `CircularWiringError` subtypes) is already wrapped with proper
+        context by the instantiation logic, so it is re-raised unchanged.
+        Re-wrapping it here would double-wrap the error and discard the
+        original message/cause, making thread-safe failures less informative
+        than their non-thread-safe equivalents.
+
         This method always raises an exception and never returns.
         """
-        from apywire.exceptions import (
-            UnknownPlaceholderError,
-            WiringError,
-        )
+        from apywire.exceptions import WiringError
 
-        if isinstance(e, UnknownPlaceholderError):
+        if isinstance(e, WiringError):
             raise
-        # All other exceptions (including WiringError) are wrapped
+        # Any other exception is wrapped to add the attribute-name context.
         raise WiringError(f"failed to instantiate '{name}'") from e
 
     def _instantiate_attr(
