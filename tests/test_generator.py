@@ -169,6 +169,11 @@ def test_generate_invalid_formats(entry: str, expected_msg: str) -> None:
         (bytes, b""),
         (complex, 0j),
         (None, None),  # unknown annotation
+        # PEP 604 X | None must behave like Optional[X]. (Multi-arg unions
+        # yield None regardless of spelling/version, so the Union[...] case
+        # above already covers that path.)
+        (int | None, 0),
+        (str | None, ""),
     ],
     ids=[
         "int",
@@ -183,6 +188,8 @@ def test_generate_invalid_formats(entry: str, expected_msg: str) -> None:
         "bytes",
         "complex",
         "unknown",
+        "pep604_optional_int",
+        "pep604_optional_str",
     ],
 )
 def test_generate_type_defaults(
