@@ -7,6 +7,7 @@ from textwrap import dedent
 from typing import Protocol, cast
 
 import black
+import pytest
 
 import apywire
 
@@ -643,6 +644,42 @@ def test_empty_module_name_raises() -> None:
         assert False, "Should have raised ValueError for empty module name"
     except ValueError as e:
         assert "invalid spec key 'Class name'" in str(e)
+
+
+def test_positional_arg_gap_raises_at_construction() -> None:
+    """A gap in positional (integer) keys is rejected eagerly.
+
+    {0: ..., 2: ...} (missing index 1) would silently pass two positional
+    args, shifting the intended third argument into the second slot.
+    """
+    spec: apywire.Spec = {"datetime.date d": {0: 2023, 2: 27}}
+    with pytest.raises(ValueError, match="contiguous sequence starting at 0"):
+        apywire.Wiring(spec, thread_safe=False)
+
+
+def test_positional_arg_nonzero_start_raises() -> None:
+    """Positional keys that do not start at 0 are rejected."""
+    spec: apywire.Spec = {"datetime.date d": {1: 2023, 2: 27}}
+    with pytest.raises(ValueError, match="contiguous sequence starting at 0"):
+        apywire.Wiring(spec, thread_safe=False)
+
+
+def test_positional_arg_gap_rejected_by_compiler_too() -> None:
+    """The compiler rejects the same malformed spec at construction.
+
+    Runtime and compiled paths share WiringBase.__init__, so both fail fast
+    and identically.
+    """
+    spec: apywire.Spec = {"datetime.date d": {0: 2023, 2: 27}}
+    with pytest.raises(ValueError, match="contiguous sequence starting at 0"):
+        apywire.WiringCompiler(spec)
+
+
+def test_contiguous_positional_args_are_accepted() -> None:
+    """A complete 0..n-1 positional run instantiates normally."""
+    spec: apywire.Spec = {"datetime.date d": {0: 2023, 1: 10, 2: 27}}
+    wired = apywire.Wiring(spec, thread_safe=False)
+    assert wired.d() == datetime.date(2023, 10, 27)
 
 
 def test_unknown_placeholder_exception_during_creation() -> None:
