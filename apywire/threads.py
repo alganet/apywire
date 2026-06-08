@@ -159,13 +159,20 @@ class ThreadSafeMixin:
                     try:
                         inst = maker()
                     except LockUnavailableError:
-                        # On optimistic failure, release the lock and fall
-                        # through to global path
-                        lock.release()
-                        held.clear()
+                        # On optimistic failure, release ALL locks held by
+                        # this thread (this attribute's lock plus any
+                        # per-attribute locks acquired by successful nested
+                        # instantiations earlier in the chain), then fall
+                        # through to the global path. Releasing only `lock`
+                        # here would leak the nested locks and deadlock other
+                        # threads.
+                        self._release_held_locks()
                     except Exception as e:
-                        # Release lock before propagating exception
-                        lock.release()
+                        # Release ALL locks held by this thread before
+                        # propagating, for the same reason as above: nested
+                        # instantiations that succeeded earlier in the chain
+                        # still hold their per-attribute locks.
+                        self._release_held_locks()
                         self._wrap_instantiation_error(e, name)
                     else:
                         # Store in cache

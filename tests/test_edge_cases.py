@@ -179,6 +179,107 @@ def test_instantiate_attr_nested_optimistic_failure() -> None:
     t.join()
 
 
+def test_instantiate_attr_optimistic_failure_releases_nested_locks() -> None:
+    """Optimistic fallback must release locks held by successful nested deps.
+
+    Regression: a parent instantiates one dependency successfully (acquiring
+    its per-attribute lock, which is held until the top-level call finishes)
+    and then a later dependency fails the optimistic acquire. The fallback to
+    the global path must release ALL locks held by this thread, not just the
+    parent's own lock, otherwise the first dependency's lock leaks and
+    deadlocks other threads.
+    """
+    container = MockContainer()
+
+    # A foreign thread holds the lock for the second dependency so the nested
+    # optimistic acquire fails with LockUnavailableError.
+    blocked_lock = container._get_attribute_lock("blocked")
+
+    def hold_blocked() -> None:
+        with blocked_lock:
+            time.sleep(0.2)
+
+    t = threading.Thread(target=hold_blocked)
+    t.start()
+    time.sleep(0.05)  # Ensure the foreign thread holds the lock
+
+    def make_ok() -> str:
+        return "ok"
+
+    def make_blocked() -> str:
+        return cast(str, container._instantiate_attr("blocked", make_ok))
+
+    def make_parent() -> str:
+        # First dep succeeds (its lock is appended to held), second fails the
+        # optimistic acquire and raises LockUnavailableError.
+        container._instantiate_attr("ok", make_ok)
+        container._instantiate_attr("blocked", make_blocked)
+        return "parent"
+
+    result = container._instantiate_attr("parent", make_parent)
+    assert result == "parent"
+    t.join()
+
+    # After completion no locks may remain held by this thread.
+    assert container._get_held_locks() == []
+    assert container._local.mode is None
+
+    # The successful dependency's lock must be acquirable by another thread.
+    assert _lock_free_for_other_thread(container, "ok")
+
+
+def test_instantiate_attr_exception_releases_nested_locks() -> None:
+    """A real exception in optimistic mode must release nested deps' locks.
+
+    Regression: a parent instantiates one dependency successfully (its
+    per-attribute lock is held until the top-level call finishes) and then
+    raises a normal exception. The exception handler must release ALL locks
+    held by this thread, not just the parent's own lock, otherwise the
+    successful dependency's lock leaks and deadlocks other threads.
+    """
+    container = MockContainer()
+
+    def make_ok() -> str:
+        return "ok"
+
+    def make_parent() -> str:
+        # First dep succeeds (lock appended to held), then construction of the
+        # parent itself fails with a normal exception.
+        container._instantiate_attr("ok", make_ok)
+        raise ValueError("boom during parent construction")
+
+    with pytest.raises(WiringError, match="failed to instantiate 'parent'"):
+        container._instantiate_attr("parent", make_parent)
+
+    # No locks left held by this thread; the successful dep's lock is free.
+    assert container._get_held_locks() == []
+    assert container._local.mode is None
+    assert _lock_free_for_other_thread(container, "ok")
+
+
+def _lock_free_for_other_thread(
+    container: MockContainer, name: str
+) -> bool:
+    """Return True if `name`'s per-attribute lock is acquirable elsewhere.
+
+    Probes from a separate thread because RLock is reentrant: the calling
+    thread could re-acquire a leaked lock and hide the leak.
+    """
+    lock = container._get_attribute_lock(name)
+    acquired: list[bool] = []
+
+    def probe() -> None:
+        got = lock.acquire(blocking=False)
+        acquired.append(got)
+        if got:
+            lock.release()
+
+    p = threading.Thread(target=probe)
+    p.start()
+    p.join()
+    return acquired == [True]
+
+
 def test_instantiate_attr_exception_handling() -> None:
     """Test exception wrapping during instantiation."""
     container = MockContainer()
