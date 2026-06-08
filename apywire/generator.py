@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
-from types import ModuleType, NoneType
+from types import ModuleType, NoneType, UnionType
 from typing import (
     Union,
     cast,
@@ -216,8 +216,11 @@ class Generator(SpecParser):
             tuple[object, ...], get_args(annotation)
         )
 
-        # Optional[X] is Union[X, None]
-        if origin is Union:
+        # Optional[X] / Union[X, None] (typing.Union) and the PEP 604 form
+        # X | None (types.UnionType). On Python < 3.14 get_origin returns a
+        # different object for each spelling, so both must be matched for
+        # `X | None` to be normalized like Optional[X].
+        if origin is Union or origin is UnionType:
             # Filter out NoneType
             non_none_args: list[object] = [
                 a for a in args if a is not type(None)
