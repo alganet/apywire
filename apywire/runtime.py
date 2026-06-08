@@ -101,8 +101,31 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
 
     def __getattr__(self, name: str) -> Accessor:
         """Return a callable accessor for the named wired object."""
+        # Read internal state from __dict__ directly. __getattr__ only runs
+        # when normal lookup fails, so referencing self._parsed/self._values
+        # here would re-enter __getattr__ and recurse forever whenever they
+        # are absent (e.g. during copy/unpickle or a partially-failed
+        # __init__). Failing cleanly with AttributeError lets those protocols
+        # work and keeps errors meaningful.
+        # object.__getattribute__ does the normal C-level lookup and raises
+        # AttributeError directly if the attribute is absent, WITHOUT calling
+        # __getattr__ again -- so missing internal state fails cleanly instead
+        # of recursing.
+        try:
+            parsed = cast(
+                "dict[str, object]",
+                object.__getattribute__(self, "_parsed"),
+            )
+            values = cast(
+                "dict[str, object]",
+                object.__getattribute__(self, "_values"),
+            )
+        except AttributeError:
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            ) from None
         # If the name is in our parsed spec or constants, return an accessor.
-        if name in self._parsed or name in self._values:
+        if name in parsed or name in values:
             return Accessor(self, name)
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute '{name}'"
@@ -371,13 +394,20 @@ class AioAccessor:
 
     def __getattr__(self, name: str) -> Callable[[], Awaitable[object]]:
         """Return an async callable for the named wired object."""
-        # Check if valid name
-        if (
-            name not in self._wiring._parsed
-            and name not in self._wiring._values
-        ):
+        # Read _wiring from __dict__ to avoid recursing through __getattr__
+        # if this accessor isn't fully initialized.
+        try:
+            wiring = cast(
+                WiringRuntime, object.__getattribute__(self, "_wiring")
+            )
+        except AttributeError:
             raise AttributeError(
-                f"'{type(self._wiring).__name__}' object has no attribute "
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            ) from None
+        # Check if valid name
+        if name not in wiring._parsed and name not in wiring._values:
+            raise AttributeError(
+                f"'{type(wiring).__name__}' object has no attribute "
                 f"'{name}'"
             )
 
@@ -415,8 +445,18 @@ class CompiledAio:
 
     def __getattr__(self, name: str) -> Callable[[], Awaitable[object]]:
         """Return an async callable for the named accessor."""
+        # Read _compiled from __dict__ to avoid recursing through __getattr__
+        # if this wrapper isn't fully initialized.
+        try:
+            compiled = cast(
+                object, object.__getattribute__(self, "_compiled")
+            )
+        except AttributeError:
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            ) from None
         method: Callable[[], object] = cast(
-            Callable[[], object], getattr(self._compiled, name)
+            Callable[[], object], getattr(compiled, name)
         )
         cache_attr = f"{CACHE_ATTR_PREFIX}{name}"
 
