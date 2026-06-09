@@ -540,14 +540,20 @@ class WiringBase(SpecParser):
         Raises:
             CircularWiringError: If circular dependencies detected
         """
-        # Calculate in-degree (number of dependencies) for each node
-        # Pre-convert to set for efficient intersection
+        # Calculate in-degree (number of dependencies) for each node and
+        # build the reverse adjacency (dependents-of) map in a single pass.
+        # Dependents are appended in node-iteration order, so a node's list
+        # preserves the original dict insertion order and the dequeue order
+        # below stays identical to a per-node rescan of ``dependencies``.
         all_nodes = set(dependencies.keys())
         in_degree: dict[str, int] = {}
+        dependents: dict[str, list[str]] = {node: [] for node in dependencies}
         for node, deps in dependencies.items():
             # Filter to only dependencies within this set
             internal_deps = deps & all_nodes
             in_degree[node] = len(internal_deps)
+            for dep in internal_deps:
+                dependents[dep].append(node)
 
         # Start with nodes that have no dependencies (within this set)
         queue: deque[str] = deque(
@@ -559,12 +565,11 @@ class WiringBase(SpecParser):
             node = queue.popleft()
             result.append(node)
 
-            # Find nodes that depend on this node (within this set)
-            for other_node, deps in dependencies.items():
-                if node in deps:
-                    in_degree[other_node] -= 1
-                    if in_degree[other_node] == 0:
-                        queue.append(other_node)
+            # Decrement in-degree of nodes that depend on this one
+            for other_node in dependents[node]:
+                in_degree[other_node] -= 1
+                if in_degree[other_node] == 0:
+                    queue.append(other_node)
 
         # If we couldn't process all nodes, there's a cycle
         if len(result) != len(dependencies):
