@@ -63,7 +63,8 @@ The project enforces 95% test coverage or higher. New code should include compre
   
   execd: dict[str, MockConfig] = {}
   ```
-- **Coverage**: Aim for 100% branch coverage.
+- **Coverage**: The CI gate enforces a 95% branch-coverage floor (`fail_under`
+  in `pyproject.toml`); aim for 100% on new code.
 - **Naming**: Use descriptive test names: `test_<feature>_<scenario>_<expected_behavior>()`.
 - **Module Mocking**: When testing custom classes, inject them into `sys.modules` using a `try...finally` block to ensure cleanup.
   ```python
