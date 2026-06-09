@@ -1846,7 +1846,8 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">execd</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MockConfig</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 </code></pre></div></li>
-<li><strong>Coverage</strong>: Aim for 100% branch coverage.</li>
+<li><strong>Coverage</strong>: The CI gate enforces a 95% branch-coverage floor (<code>fail_under</code>
+  in <code>pyproject.toml</code>); aim for 100% on new code.</li>
 <li><strong>Naming</strong>: Use descriptive test names: <code>test_&lt;feature&gt;_&lt;scenario&gt;_&lt;expected_behavior&gt;()</code>.</li>
 <li><strong>Module Mocking</strong>: When testing custom classes, inject them into <code>sys.modules</code> using a <code>try...finally</code> block to ensure cleanup.
   <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">MockModule</span><span class="p">(</span><span class="n">ModuleType</span><span class="p">):</span> <span class="o">...</span>
