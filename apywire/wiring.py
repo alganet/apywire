@@ -24,6 +24,8 @@ from typing import NamedTuple, TypeAlias, cast
 
 from apywire.constants import (
     CACHE_ATTR_PREFIX,
+    DEFAULT_LOCK_RETRY_SLEEP,
+    DEFAULT_MAX_LOCK_ATTEMPTS,
     PLACEHOLDER_END,
     PLACEHOLDER_REGEX,
     PLACEHOLDER_START,
@@ -261,8 +263,8 @@ class WiringBase(SpecParser):
         spec: Spec,
         *,
         thread_safe: bool = False,
-        max_lock_attempts: int = 10,
-        lock_retry_sleep: float = 0.01,
+        max_lock_attempts: int = DEFAULT_MAX_LOCK_ATTEMPTS,
+        lock_retry_sleep: float = DEFAULT_LOCK_RETRY_SLEEP,
     ) -> None:
         """Initialize a Wiring container.
 

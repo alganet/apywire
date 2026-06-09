@@ -16,6 +16,8 @@ from typing import Awaitable, Callable, Protocol, cast, final
 
 from apywire.constants import (
     CACHE_ATTR_PREFIX,
+    DEFAULT_LOCK_RETRY_SLEEP,
+    DEFAULT_MAX_LOCK_ATTEMPTS,
     PLACEHOLDER_REGEX,
     SYNTHETIC_CONST,
 )
@@ -67,8 +69,8 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
         spec: Spec,
         *,
         thread_safe: bool = False,
-        max_lock_attempts: int = 10,
-        lock_retry_sleep: float = 0.01,
+        max_lock_attempts: int = DEFAULT_MAX_LOCK_ATTEMPTS,
+        lock_retry_sleep: float = DEFAULT_LOCK_RETRY_SLEEP,
     ) -> None:
         """Initialize a WiringRuntime container.
 
@@ -91,8 +93,8 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
 
     def _init_thread_safety(
         self,
-        max_lock_attempts: int = 10,
-        lock_retry_sleep: float = 0.01,
+        max_lock_attempts: int = DEFAULT_MAX_LOCK_ATTEMPTS,
+        lock_retry_sleep: float = DEFAULT_LOCK_RETRY_SLEEP,
     ) -> None:
         """Initialize thread safety mixin."""
         ThreadSafeMixin._init_thread_safety(
@@ -448,9 +450,7 @@ class CompiledAio:
         # Read _compiled from __dict__ to avoid recursing through __getattr__
         # if this wrapper isn't fully initialized.
         try:
-            compiled = cast(
-                object, object.__getattribute__(self, "_compiled")
-            )
+            compiled = cast(object, object.__getattribute__(self, "_compiled"))
         except AttributeError:
             raise AttributeError(
                 f"'{type(self).__name__}' object has no attribute '{name}'"

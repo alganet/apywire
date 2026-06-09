@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import configparser
 import json
-from types import ModuleType
 from collections.abc import Mapping
+from types import ModuleType
 from typing import cast
 
 from apywire.exceptions import FormatError
@@ -311,15 +311,12 @@ def json_to_spec(content: str) -> Spec:
     try:
         raw: object = json.loads(content)
     except Exception as e:
-        raise FormatError(
-            "json", f"Failed to parse JSON content: {e}"
-        ) from e
+        raise FormatError("json", f"Failed to parse JSON content: {e}") from e
 
     if not isinstance(raw, dict):
         raise FormatError(
             "json",
-            "JSON root must be an object, "
-            f"got {type(raw).__name__}",
+            "JSON root must be an object, " f"got {type(raw).__name__}",
         )
 
     data: dict[str, object] = raw

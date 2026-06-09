@@ -15,7 +15,11 @@ import threading
 import time
 from typing import Callable, Literal, NoReturn, cast
 
-from apywire.constants import CACHE_ATTR_PREFIX
+from apywire.constants import (
+    CACHE_ATTR_PREFIX,
+    DEFAULT_LOCK_RETRY_SLEEP,
+    DEFAULT_MAX_LOCK_ATTEMPTS,
+)
 from apywire.exceptions import LockUnavailableError
 
 
@@ -47,8 +51,8 @@ class ThreadSafeMixin:
 
     def _init_thread_safety(
         self,
-        max_lock_attempts: int = 10,
-        lock_retry_sleep: float = 0.01,
+        max_lock_attempts: int = DEFAULT_MAX_LOCK_ATTEMPTS,
+        lock_retry_sleep: float = DEFAULT_LOCK_RETRY_SLEEP,
     ) -> None:
         """Initialize thread safety primitives.
 

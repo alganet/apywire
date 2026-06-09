@@ -452,7 +452,7 @@ class WiringCompiler(WiringBase):
         # Add import statements
         modules = set()
         for module_name, _, _, _ in self._parsed.values():
-            # Skip synthetic __pconst__ module
+            # Skip the synthetic __sconst__ module (SYNTHETIC_CONST)
             if module_name != SYNTHETIC_CONST:
                 modules.add(module_name)
         if thread_safe:

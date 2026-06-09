@@ -23,3 +23,8 @@ PLACEHOLDER_REGEX = re.compile(PLACEHOLDER_PATTERN)
 SYNTHETIC_CONST = "__sconst__"  # Synthetic module for promoted constants
 
 CACHE_ATTR_PREFIX = "_"  # Prefix for cache attributes (_name)
+
+# Thread-safety defaults: max retries and per-retry sleep when falling back
+# to the global lock in thread_safe mode.
+DEFAULT_MAX_LOCK_ATTEMPTS = 10
+DEFAULT_LOCK_RETRY_SLEEP = 0.01
