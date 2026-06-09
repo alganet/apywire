@@ -60,3 +60,38 @@ def test_astify_tuple_and_fallback_to_constant() -> None:
     # ast.Constant.value is typed as a union of constant types, but we're
     # testing the fallback behavior, so we cast to object for the check
     assert cast(object, const_node.value) is d
+
+
+def test_topological_sort_orders_dependencies_first() -> None:
+    w = apywire.Wiring({}, thread_safe=False)
+    # c depends on b, b depends on a; result must list each dep before its
+    # dependent and be deterministic.
+    deps = {"c": {"b"}, "b": {"a"}, "a": set()}
+    order = w._topological_sort(deps)
+    assert order == ["a", "b", "c"]
+    # External (out-of-set) references are ignored for ordering.
+    assert w._topological_sort({"a": {"external"}}) == ["a"]
+
+
+def test_topological_sort_deterministic_for_independent_nodes() -> None:
+    w = apywire.Wiring({}, thread_safe=False)
+    # Multiple roots and a shared dependent. Zero-degree roots are emitted in
+    # insertion order (a, b, c); d becomes ready once b is processed and is
+    # appended behind the already-queued c. The exact sequence is pinned so a
+    # regression that reorders output (and would change compiled-output bytes)
+    # fails here rather than silently passing.
+    deps = {"a": set(), "b": set(), "d": {"a", "b"}, "c": set()}
+    assert w._topological_sort(deps) == ["a", "b", "c", "d"]
+    # Reordering the insertion order reorders the output correspondingly.
+    reordered = {"c": set(), "b": set(), "a": set(), "d": {"a", "b"}}
+    assert w._topological_sort(reordered) == ["c", "b", "a", "d"]
+
+
+def test_topological_sort_raises_on_cycle() -> None:
+    import pytest
+
+    from apywire.exceptions import CircularWiringError
+
+    w = apywire.Wiring({}, thread_safe=False)
+    with pytest.raises(CircularWiringError):
+        w._topological_sort({"a": {"b"}, "b": {"a"}})
