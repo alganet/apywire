@@ -284,3 +284,38 @@ def test_cli_generate_toml_write_error() -> None:
     finally:
         # Restore tomli_w
         apywire.formats._tomli_w = original_tomli_w
+
+
+def test_cli_compile_emit_spec_includes_spec_literal() -> None:
+    """--emit-spec adds the source spec to the generated module."""
+    spec_json = '{"y": 2025, "datetime.date d": {"year": "{y}"}}'
+    with patch("sys.stdin", StringIO(spec_json)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(["compile", "--format", "json", "--emit-spec", "-"])
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert "spec = {" in output
+    assert "'{y}'" in output
+
+
+def test_cli_compile_without_emit_spec_omits_spec_literal() -> None:
+    """Without --emit-spec the generated module is unchanged."""
+    spec_json = '{"y": 2025, "datetime.date d": {"year": "{y}"}}'
+    with patch("sys.stdin", StringIO(spec_json)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(["compile", "--format", "json", "-"])
+
+    assert result == 0
+    assert "spec = {" not in mock_stdout.getvalue()
+
+
+def test_cli_compile_emit_spec_unemittable_spec_errors() -> None:
+    """A spec that cannot be emitted fails with a message, not a trace."""
+    spec_json = '{"spec.Thing x": {}}'
+    with patch("sys.stdin", StringIO(spec_json)):
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            result = main(["compile", "--format", "json", "--emit-spec", "-"])
+
+    assert result == 1
+    assert "Error compiling spec" in mock_stderr.getvalue()
