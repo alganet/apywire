@@ -260,19 +260,28 @@ module is self-describing:
 
 ```python
 import datetime
-
-spec = {'y': 2025, 'datetime.date d': {'year': '{y}'}}
+spec = {'y': 2025, 'datetime.date d': {'year': '{y}', 'month': 1, 'day': 1}}
 
 class Compiled:
 
+    def d(self):
+        if not hasattr(self, '_d'):
+            self._d = datetime.date(year=self.y(), month=1, day=1)
+        return self._d
+
     def y(self):
         return 2025
-    ...
+compiled = Compiled()
 ```
 
-Placeholders are emitted verbatim, so the spec can be overlaid with
-[`merge_specs`](merging.md) and wired again — which is how compiled
-defaults stay extensible by a user's config.
+Placeholders are emitted verbatim (`'{y}'` stays a string), so the spec
+can be overlaid with [`merge_specs`](merging.md) and wired again — which
+is how compiled defaults stay extensible by a user's config.
+
+A spec that cannot be emitted — one holding a value with no literal
+source representation, or one wiring a module whose root package is named
+`spec` (the emitted assignment would shadow its import) — prints
+`Error compiling spec: …` and exits 1.
 
 ## Next Steps
 

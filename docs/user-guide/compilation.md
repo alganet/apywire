@@ -105,8 +105,14 @@ overlaid onto it at runtime with [`merge_specs`](merging.md#overlaying-compiled-
 
 Placeholders are emitted verbatim (`"{year}"` stays a string, rather than
 becoming an accessor call), so the emitted spec can be merged and wired
-again. It is off by default, and a spec holding values with no literal
-source representation cannot be emitted.
+again. `WiringCompiler.spec` exposes the same source spec directly, for
+callers holding a compiler rather than its output.
+
+It is off by default. `compile(emit_spec=True)` raises `ValueError` for
+a spec it cannot emit: one holding a value with no literal source
+representation (a spec built in Python may hold arbitrary objects), or
+one wiring a module whose root package is named `spec` — the emitted
+assignment would shadow that module's import and turn it into a dict.
 
 ### Combined Options
 

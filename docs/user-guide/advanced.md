@@ -503,6 +503,8 @@ spec = {
 ### 4. Separate Concerns
 
 ```python
+from apywire import Wiring, merge_specs
+
 # config.py - Configuration constants
 config_spec = {
     "host": "localhost",
@@ -512,13 +514,13 @@ config_spec = {
 
 # infrastructure.py - Infrastructure components
 infra_spec = {
-    "Database db": {"host": "{host}", "port": "{port}"},
-    "Cache cache": {},
+    "myapp.db.Database db": {"host": "{host}", "port": "{port}"},
+    "myapp.cache.Cache cache": {},
 }
 
 # services.py - Business logic
 service_spec = {
-    "MyService service": {"db": "{db}", "cache": "{cache}"},
+    "myapp.services.MyService service": {"db": "{db}", "cache": "{cache}"},
 }
 
 # Merge them

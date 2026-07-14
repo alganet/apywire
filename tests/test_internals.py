@@ -97,34 +97,31 @@ def test_topological_sort_raises_on_cycle() -> None:
         w._topological_sort({"a": {"b"}, "b": {"a"}})
 
 
-def test_wiring_base_retains_source_spec_copy() -> None:
-    """The source spec is kept, and kept isolated from the caller."""
+def test_compiler_retains_source_spec() -> None:
+    """The compiler keeps the spec it was built from, and copies it."""
     spec: apywire.Spec = {"datetime.date d": {"year": 2000}, "y": 1}
-    w = apywire.Wiring(spec, thread_safe=False)
-
-    assert w._spec == spec
-    assert w._spec is not spec
-
-
-def test_compiler_spec_property_returns_copy() -> None:
-    """The compiler exposes its source spec, defensively copied."""
-    spec: apywire.Spec = {"datetime.date d": {"year": 2000}}
     compiler = apywire.WiringCompiler(spec)
 
     assert compiler.spec == spec
-    assert compiler.spec is not compiler._spec
+    assert compiler.spec is not spec
 
 
-def test_runtime_entry_named_spec_still_returns_accessor() -> None:
-    """A spec entry named 'spec' is not shadowed by an attribute.
+def test_runtime_holds_no_spec_attribute() -> None:
+    """The runtime container reserves no name for the source spec.
 
-    Pins why `spec` is exposed on the compiler and not on WiringBase: the
-    runtime container resolves unknown attributes as wired entries, so a
-    `spec` property here would silently shadow this entry.
+    Every attribute WiringBase holds is a name a spec can no longer
+    expose, because normal lookup wins over `__getattr__`. Entries named
+    `spec` and `_spec` must both still wire -- they did before the
+    compiler needed the source spec, and they must after.
     """
     import datetime
 
-    w = apywire.Wiring(
-        {"datetime.date spec": {"year": 2000, "month": 1, "day": 1}}
+    day: apywire.SpecEntry = {"year": 2000, "month": 1, "day": 1}
+    # Separate containers: `spec` and `_spec` in one spec is a pre-existing
+    # cache-attribute collision, rejected on its own terms.
+    assert apywire.Wiring({"datetime.date spec": day}).spec() == datetime.date(
+        2000, 1, 1
     )
-    assert w.spec() == datetime.date(2000, 1, 1)
+    assert apywire.Wiring(
+        {"datetime.date _spec": day}
+    )._spec() == datetime.date(2000, 1, 1)

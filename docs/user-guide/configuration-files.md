@@ -330,6 +330,7 @@ if __name__ == "__main__":
 
 ## Next Steps
 
+- **[Merging Specs](merging.md)** - Let a user's config extend a library's defaults
 - **[Command Line Interface](cli.md)** - Generate and compile specs
 - **[Basic Usage](basic-usage.md)** - Learn the fundamentals
 - **[Compilation](compilation.md)** - Understanding compiled output
