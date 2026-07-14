@@ -6,7 +6,7 @@
 
 import sys
 from types import ModuleType
-from typing import cast
+from typing import Protocol, cast
 
 import pytest
 
@@ -380,3 +380,113 @@ def test_transitive_promotion_of_constants() -> None:
 
     finally:
         del sys.modules["test_transitive"]
+
+
+@pytest.mark.parametrize(
+    "template, expected",
+    [
+        ("{host}:{port}", "db.example:5432"),
+        ("{host}:{port}/db", "db.example:5432/db"),
+        ("{host}{port}", "db.example5432"),
+        ("{host}", "db.example"),
+    ],
+    ids=["brace_flanked", "trailing_text", "adjacent", "single_ref"],
+)
+def test_constant_with_two_placeholders_and_no_trailing_text(
+    template: str, expected: str
+) -> None:
+    """A constant that both starts and ends with a reference is not one
+    reference.
+
+    "{host}:{port}" was read as a single placeholder literally named
+    'host}:{port', because the check was startswith('{') and
+    endswith('}'). Any DSN-shaped constant raised UnknownPlaceholderError,
+    while "{host}:{port}/db" worked -- the trailing text was what saved it.
+    """
+    spec: apywire.Spec = {
+        "host": "db.example",
+        "port": 5432,
+        "dsn": template,
+    }
+    wired = apywire.Wiring(spec, thread_safe=False)
+    assert wired._values["dsn"] == expected
+
+
+def test_promoted_constant_with_two_placeholders_and_no_trailing_text() -> (
+    None
+):
+    """The same misread hit constants promoted for referencing wired objects.
+
+    Those resolve through _resolve/_format_string_constant rather than
+    _resolve_constant, so they need their own guard.
+    """
+
+    class Host:
+        def __str__(self) -> str:
+            return "dbhost"
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("mymod_dsn")
+            self.Host = Host
+
+    sys.modules["mymod_dsn"] = MockModule()
+    try:
+        spec: apywire.Spec = {
+            "mymod_dsn.Host host": {},
+            "port": 5432,
+            "dsn": "{host}:{port}",
+        }
+        wired = apywire.Wiring(spec, thread_safe=False)
+        assert cast(str, wired.dsn()) == "dbhost:5432"
+    finally:
+        del sys.modules["mymod_dsn"]
+
+
+def test_compiled_container_resolves_brace_flanked_constant() -> None:
+    """The compiled container shares the predicate, so it must agree."""
+
+    class HasDsn(Protocol):
+        def dsn(self) -> str: ...
+
+    spec: apywire.Spec = {
+        "host": "db.example",
+        "port": 5432,
+        "dsn": "{host}:{port}",
+    }
+    source = apywire.WiringCompiler(spec, thread_safe=False).compile()
+    execd: dict[str, HasDsn] = {}
+    exec(source, execd)
+    compiled: HasDsn = execd["compiled"]
+    assert compiled.dsn() == "db.example:5432"
+
+
+def test_literal_braces_in_arguments_are_not_interpolated() -> None:
+    """Constructor arguments keep literal braces.
+
+    A placeholder in an argument is a whole-string object reference;
+    embedded braces are data. A logging format string like
+    "{levelname}: {message}" is a literal the container must not touch,
+    which is why the interpolation above is a constant-only feature.
+    """
+
+    class Formatter:
+        def __init__(self, fmt: str) -> None:
+            self.fmt = fmt
+
+    class MockModule(ModuleType):
+        def __init__(self) -> None:
+            super().__init__("mymod_fmt")
+            self.Formatter = Formatter
+
+    sys.modules["mymod_fmt"] = MockModule()
+    try:
+        spec: apywire.Spec = {
+            "mymod_fmt.Formatter formatter": {"fmt": "{levelname}: {message}"},
+        }
+        wired = apywire.Wiring(spec, thread_safe=False)
+        assert (
+            cast(Formatter, wired.formatter()).fmt == "{levelname}: {message}"
+        )
+    finally:
+        del sys.modules["mymod_fmt"]

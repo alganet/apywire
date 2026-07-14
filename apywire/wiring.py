@@ -429,8 +429,17 @@ class WiringBase(SpecParser):
         )
 
     def _is_placeholder(self, s: str) -> bool:
-        """Check if a string is a placeholder reference like '{name}'."""
-        return s.startswith(PLACEHOLDER_START) and s.endswith(PLACEHOLDER_END)
+        """Check if a string is a single placeholder reference like '{name}'.
+
+        Callers use this to decide whether the string *is* a reference,
+        and so resolves to the referenced value itself, or merely
+        *contains* references to interpolate into it. Testing the first
+        and last character cannot tell those apart: "{host}:{port}" both
+        starts with a brace and ends with one, yet it is two references
+        with a colon between them, not one named 'host}:{port'. Require
+        the whole string to match a single placeholder.
+        """
+        return PLACEHOLDER_REGEX.fullmatch(s) is not None
 
     def _extract_placeholder_name(self, s: str) -> str:
         """Extract the name from a placeholder string like '{name}'.
