@@ -257,6 +257,7 @@ class WiringBase(SpecParser):
 
     _parsed: dict[str, _ParsedEntry]
     _values: dict[str, _RuntimeValue]
+    _spec: Spec
 
     def __init__(
         self,
@@ -276,6 +277,11 @@ class WiringBase(SpecParser):
             lock_retry_sleep: Sleep time in seconds between lock retries
                               (only when thread_safe=True).
         """
+        # Keep the source spec: it is the only form that can be overlaid
+        # (see `merge_specs`) or emitted, since `_parsed`/`_values` are a
+        # lossy decomposition of it. Kept private -- a public `spec`
+        # attribute would shadow a spec entry named `spec` at runtime.
+        self._spec = dict(spec)
         self._thread_safe = thread_safe
         self._max_lock_attempts = max_lock_attempts
         self._lock_retry_sleep = lock_retry_sleep
