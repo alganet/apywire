@@ -582,6 +582,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../user-guide/merging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merging Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../user-guide/cli/" class="md-nav__link">
         
   
@@ -1896,23 +1924,24 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>│   ├── wiring.py         # Base wiring functionality
 <a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>│   ├── runtime.py        # Runtime wiring implementation
 <a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>│   ├── compiler.py       # Code generation
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>│   ├── threads.py        # Thread safety utilities
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>│   ├── exceptions.py     # Exception classes
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>│   ├── constants.py      # Constants and configuration
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>│   └── py.typed          # PEP 561 marker file
-<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>├── tests/                # Test suite
-<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>│   ├── test_single.py    # Runtime tests
-<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>│   ├── test_compile_aio.py  # Async compilation tests
-<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>│   ├── test_threading.py    # Thread safety tests
-<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>│   ├── test_factory_methods.py  # Factory method tests
-<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>│   ├── test_edge_cases.py   # Edge case tests
-<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>│   ├── test_stdlib_compat.py  # Stdlib compatibility tests
-<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>│   └── test_internals.py    # Internal implementation tests
-<a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>├── docs/                 # MkDocs documentation
-<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>├── pyproject.toml        # Project configuration
-<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>├── setup.py              # Build configuration (Cython)
-<a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>├── Makefile              # Development commands
-<a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>└── README.md             # Project readme
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>│   ├── merge.py          # Spec overlays (merge_specs)
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>│   ├── threads.py        # Thread safety utilities
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>│   ├── exceptions.py     # Exception classes
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>│   ├── constants.py      # Constants and configuration
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>│   └── py.typed          # PEP 561 marker file
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>├── tests/                # Test suite
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>│   ├── test_single.py    # Runtime tests
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>│   ├── test_compile_aio.py  # Async compilation tests
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>│   ├── test_threading.py    # Thread safety tests
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>│   ├── test_factory_methods.py  # Factory method tests
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>│   ├── test_edge_cases.py   # Edge case tests
+<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>│   ├── test_stdlib_compat.py  # Stdlib compatibility tests
+<a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>│   └── test_internals.py    # Internal implementation tests
+<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>├── docs/                 # MkDocs documentation
+<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>├── pyproject.toml        # Project configuration
+<a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>├── setup.py              # Build configuration (Cython)
+<a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>├── Makefile              # Development commands
+<a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a>└── README.md             # Project readme
 </code></pre></div>
 <h2 id="code-standards">Code Standards<a class="headerlink" href="#code-standards" title="Permanent link">&para;</a></h2>
 <h3 id="type-annotations">Type Annotations<a class="headerlink" href="#type-annotations" title="Permanent link">&para;</a></h3>
@@ -2004,6 +2033,7 @@ SPDX-License-Identifier: ISC
 <li><strong><code>wiring.py</code></strong>: Base class, type system, placeholder parsing</li>
 <li><strong><code>runtime.py</code></strong>: Runtime <code>Wiring</code> implementation, <code>Accessor</code>/<code>AioAccessor</code></li>
 <li><strong><code>compiler.py</code></strong>: Code generation via <code>WiringCompiler</code></li>
+<li><strong><code>merge.py</code></strong>: Spec overlays via <code>merge_specs</code> — a pure <code>Spec</code> -&gt; <code>Spec</code> transform applied <em>before</em> wiring, so it adds no runtime or compiled semantics to keep in sync</li>
 <li><strong><code>threads.py</code></strong>: Thread safety mixins and utilities</li>
 <li><strong><code>exceptions.py</code></strong>: Custom exception classes</li>
 <li><strong><code>constants.py</code></strong>: Shared constants (delimiter, placeholder markers)</li>

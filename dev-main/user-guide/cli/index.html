@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://alganet.github.io/apywire/dev-main/user-guide/cli/">
       
       
-        <link rel="prev" href="../configuration-files/">
+        <link rel="prev" href="../merging/">
       
       
         <link rel="next" href="../async-support/">
@@ -586,6 +586,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../merging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merging Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -687,6 +715,17 @@
     <span class="md-ellipsis">
       
         compile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        merge
       
     </span>
   </a>
@@ -848,6 +887,17 @@
     <span class="md-ellipsis">
       
         --thread-safe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#-emit-spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --emit-spec
       
     </span>
   </a>
@@ -1206,6 +1256,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        merge
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1367,6 +1428,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#-emit-spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --emit-spec
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1452,13 +1524,14 @@ SPDX-License-Identifier: ISC
 </code></pre></div>
 <h3 id="compile">compile<a class="headerlink" href="#compile" title="Permanent link">&para;</a></h3>
 <p>Compile a spec file to Python code.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>FORMAT<span class="w"> </span><span class="o">[</span>--aio<span class="o">]</span><span class="w"> </span><span class="o">[</span>--thread-safe<span class="o">]</span><span class="w"> </span>FILE
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>FORMAT<span class="w"> </span><span class="o">[</span>--aio<span class="o">]</span><span class="w"> </span><span class="o">[</span>--thread-safe<span class="o">]</span><span class="w"> </span><span class="o">[</span>--emit-spec<span class="o">]</span><span class="w"> </span>FILE
 </code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li><code>--format FORMAT</code> - Input format: <code>ini</code>, <code>toml</code>, or <code>json</code> (required)</li>
 <li><code>--aio</code> - Generate async accessors using <code>run_in_executor</code></li>
 <li><code>--thread-safe</code> - Generate thread-safe accessors with locking</li>
+<li><code>--emit-spec</code> - Also emit the source spec as a module-level dict</li>
 <li><code>FILE</code> - Input spec file path, or <code>-</code> to read from stdin</li>
 </ul>
 <p><strong>Examples:</strong></p>
@@ -1471,8 +1544,11 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Compile with thread safety</span>
 <a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>ini<span class="w"> </span>--thread-safe<span class="w"> </span>config.ini
 <a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># Read from stdin</span>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>cat<span class="w"> </span>config.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>-
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># Compile defaults that a user&#39;s config can later extend</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>--emit-spec<span class="w"> </span>defaults.toml<span class="w"> </span>&gt;<span class="w"> </span>_defaults.py
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="c1"># Read from stdin</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>cat<span class="w"> </span>config.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>-
 </code></pre></div>
 <p><strong>Output:</strong></p>
 <p>The compiler generates a Python module with a <code>Compiled</code> class:</p>
@@ -1490,50 +1566,76 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>
 <a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="n">compiled</span> <span class="o">=</span> <span class="n">Compiled</span><span class="p">()</span>
 </code></pre></div>
+<h3 id="merge">merge<a class="headerlink" href="#merge" title="Permanent link">&para;</a></h3>
+<p>Overlay spec files and print the effective spec — what a config <em>actually</em>
+merges to. See <a href="../merging/">Merging Specs</a> for the semantics.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>merge<span class="w"> </span>--format<span class="w"> </span>FORMAT<span class="w"> </span><span class="o">[</span>--output-format<span class="w"> </span>FORMAT<span class="o">]</span><span class="w"> </span>SOURCE<span class="w"> </span><span class="o">[</span>SOURCE<span class="w"> </span>...<span class="o">]</span>
+</code></pre></div>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>--format FORMAT</code> - Input format: <code>ini</code>, <code>toml</code>, or <code>json</code> (required)</li>
+<li><code>--output-format FORMAT</code> - Output format (defaults to the input format)</li>
+<li><code>SOURCE</code> - Specs in overlay order. Each is a file path, <code>-</code> for stdin, or
+  an importable <code>pkg.module:name</code></li>
+</ul>
+<p><strong>Examples:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># What does my config actually change?</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>merge<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>defaults.toml<span class="w"> </span>user.toml
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Overlay a user&#39;s config onto compiled defaults (see --emit-spec)</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>merge<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>myapp._defaults:spec<span class="w"> </span>user.toml
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Merge TOML, read the result as JSON</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>merge<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>--output-format<span class="w"> </span>json<span class="w"> </span>base.toml<span class="w"> </span>user.toml
+</code></pre></div>
+<p>The <code>pkg.module:name</code> form is what pairs with <code>--emit-spec</code>: a compiled
+container exposes its source spec as a module attribute, and that is the
+base a user's config is overlaid onto.</p>
+<p>TOML output requires <code>tomli_w</code>; without it, use <code>--output-format json</code>.</p>
 <h2 id="full-workflow">Full Workflow<a class="headerlink" href="#full-workflow" title="Permanent link">&para;</a></h2>
 <p>A typical workflow combines generate and compile:</p>
 <h3 id="1-generate-a-spec">1. Generate a Spec<a class="headerlink" href="#1-generate-a-spec" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>config.toml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>config.toml
 </code></pre></div>
 <h3 id="2-customize-the-spec">2. Customize the Spec<a class="headerlink" href="#2-customize-the-spec" title="Permanent link">&para;</a></h3>
 <p>Edit <code>config.toml</code> with your values:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">now_year</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2025</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">now_month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">now_day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">15</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="k">[</span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="k">]</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">year</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_year}&quot;</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="n">month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_month}&quot;</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="n">day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_day}&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">now_year</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2025</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">now_month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">now_day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">15</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">[</span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="k">]</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="n">year</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_year}&quot;</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="n">month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_month}&quot;</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="n">day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_day}&quot;</span>
 </code></pre></div>
 <h3 id="3-compile-to-python">3. Compile to Python<a class="headerlink" href="#3-compile-to-python" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>config.toml<span class="w"> </span>&gt;<span class="w"> </span>wiring.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>config.toml<span class="w"> </span>&gt;<span class="w"> </span>wiring.py
 </code></pre></div>
 <h3 id="4-use-in-your-application">4. Use in Your Application<a class="headerlink" href="#4-use-in-your-application" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">wiring</span><span class="w"> </span><span class="kn">import</span> <span class="n">compiled</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">dt</span> <span class="o">=</span> <span class="n">compiled</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Date: </span><span class="si">{</span><span class="n">dt</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Date: 2025-06-15 00:00:00</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">wiring</span><span class="w"> </span><span class="kn">import</span> <span class="n">compiled</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="n">dt</span> <span class="o">=</span> <span class="n">compiled</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Date: </span><span class="si">{</span><span class="n">dt</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Date: 2025-06-15 00:00:00</span>
 </code></pre></div>
 <h2 id="pipeline-usage">Pipeline Usage<a class="headerlink" href="#pipeline-usage" title="Permanent link">&para;</a></h2>
 <p>You can pipe generate output directly to compile:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Generate and compile in one command</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="s2">&quot;collections.OrderedDict cfg&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>-
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Generate and compile in one command</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="s2">&quot;collections.OrderedDict cfg&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>-
 </code></pre></div>
 <h2 id="format-reference">Format Reference<a class="headerlink" href="#format-reference" title="Permanent link">&para;</a></h2>
 <h3 id="json">JSON<a class="headerlink" href="#json" title="Permanent link">&para;</a></h3>
 <p>Direct mapping—no special handling needed:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">&quot;collections.OrderedDict config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">&quot;max_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="nt">&quot;collections.OrderedDict config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">  </span><span class="nt">&quot;max_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="p">}</span>
 </code></pre></div>
 <h3 id="toml">TOML<a class="headerlink" href="#toml" title="Permanent link">&para;</a></h3>
 <p>Top-level keys are constants, tables are wiring entries:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">max_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="k">[</span><span class="s2">&quot;collections.OrderedDict config&quot;</span><span class="k">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="n">max_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="k">[</span><span class="s2">&quot;collections.OrderedDict config&quot;</span><span class="k">]</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Quoted Section Names</p>
@@ -1541,45 +1643,70 @@ SPDX-License-Identifier: ISC
 </div>
 <h3 id="ini">INI<a class="headerlink" href="#ini" title="Permanent link">&para;</a></h3>
 <p>Uses <code>[constants]</code> section for constants (required by INI format):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="k">[constants]</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="na">max_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">100</span>
-<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
-<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="k">[collections.OrderedDict config]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">[constants]</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="na">max_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">100</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="k">[collections.OrderedDict config]</span>
 </code></pre></div>
 <h2 id="compiler-options">Compiler Options<a class="headerlink" href="#compiler-options" title="Permanent link">&para;</a></h2>
 <h3 id="-aio">--aio<a class="headerlink" href="#-aio" title="Permanent link">&para;</a></h3>
 <p>Adds async support via a <code>.aio</code> cached property (<code>CompiledAio</code> wrapper). All methods remain sync <code>def</code>; async access is provided through <code>compiled.aio.name()</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cached_property</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">apywire.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompiledAio</span>
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
-<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Compiled</span><span class="p">:</span>
-<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">now</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_now&#39;</span><span class="p">):</span>
-<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_now</span>
-<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>
-<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>    <span class="nd">@cached_property</span>
-<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">aio</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>        <span class="k">return</span> <span class="n">CompiledAio</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cached_property</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">apywire.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompiledAio</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Compiled</span><span class="p">:</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">now</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_now&#39;</span><span class="p">):</span>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_now</span>
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>
+<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>    <span class="nd">@cached_property</span>
+<a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">aio</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a>        <span class="k">return</span> <span class="n">CompiledAio</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="-thread-safe">--thread-safe<a class="headerlink" href="#-thread-safe" title="Permanent link">&para;</a></h3>
 <p>Generates thread-safe accessors with locking:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Compiled</span><span class="p">(</span><span class="n">ThreadSafeMixin</span><span class="p">):</span>
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>
-<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_init_thread_safety</span><span class="p">()</span>
-<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>
-<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">now</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_now&#39;</span><span class="p">):</span>
-<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_now</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instantiate_attr</span><span class="p">(</span><span class="s1">&#39;now&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
-<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_now</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Compiled</span><span class="p">(</span><span class="n">ThreadSafeMixin</span><span class="p">):</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_init_thread_safety</span><span class="p">()</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">now</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_now&#39;</span><span class="p">):</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_now</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instantiate_attr</span><span class="p">(</span><span class="s1">&#39;now&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_now</span>
 </code></pre></div>
 <p>You can combine both flags:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--aio<span class="w"> </span>--thread-safe<span class="w"> </span>config.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--aio<span class="w"> </span>--thread-safe<span class="w"> </span>config.json
 </code></pre></div>
+<h3 id="-emit-spec">--emit-spec<a class="headerlink" href="#-emit-spec" title="Permanent link">&para;</a></h3>
+<p>Also emits the source spec as a module-level dict, so the compiled
+module is self-describing:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">spec</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="mi">2025</span><span class="p">,</span> <span class="s1">&#39;datetime.date d&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;year&#39;</span><span class="p">:</span> <span class="s1">&#39;</span><span class="si">{y}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="s1">&#39;month&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;day&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}}</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Compiled</span><span class="p">:</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">d</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_d&#39;</span><span class="p">):</span>
+<a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_d</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">year</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">(),</span> <span class="n">month</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_d</span>
+<a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a>
+<a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">y</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a>        <span class="k">return</span> <span class="mi">2025</span>
+<a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a><span class="n">compiled</span> <span class="o">=</span> <span class="n">Compiled</span><span class="p">()</span>
+</code></pre></div>
+<p>Placeholders are emitted verbatim (<code>'{y}'</code> stays a string), so the spec
+can be overlaid with <a href="../merging/"><code>merge_specs</code></a> and wired again — which
+is how compiled defaults stay extensible by a user's config.</p>
+<p>A spec that cannot be emitted — one holding a value with no literal
+source representation, or one wiring a module whose root package is named
+<code>spec</code> (the emitted assignment would shadow its import) — prints
+<code>Error compiling spec: …</code> and exits 1.</p>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><a href="../configuration-files/">Configuration Files</a></strong> - Loading specs from config files</li>
+<li><strong><a href="../merging/">Merging Specs</a></strong> - Overlaying one spec on another</li>
 <li><strong><a href="../compilation/">Compilation</a></strong> - Understanding the compiled output</li>
 <li><strong><a href="../generator/">Generator</a></strong> - Python API for the generator</li>
 </ul>
