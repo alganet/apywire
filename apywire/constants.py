@@ -12,6 +12,8 @@ import re
 
 SPEC_KEY_DELIMITER = " "  # Separates module.Class from name in spec keys
 
+APPEND_PREFIX = "+"  # Marks a spec key that appends to a base list value
+
 PLACEHOLDER_START = "{"  # Start marker for placeholder references
 PLACEHOLDER_END = "}"  # End marker for placeholder references
 

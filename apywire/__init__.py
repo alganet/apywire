@@ -8,10 +8,12 @@ from .compiler import WiringCompiler
 from .exceptions import (
     CircularWiringError,
     LockUnavailableError,
+    MergeError,
     UnknownPlaceholderError,
     WiringError,
 )
 from .generator import Generator
+from .merge import merge_specs
 from .runtime import (
     Accessor,
     AioAccessor,
@@ -37,8 +39,10 @@ __all__ = [
     "UnknownPlaceholderError",
     "CircularWiringError",
     "LockUnavailableError",
+    "MergeError",
     "Accessor",
     "AioAccessor",
     "CompiledAio",
     "Generator",
+    "merge_specs",
 ]
