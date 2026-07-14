@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 import apywire
 from apywire import CircularWiringError
 from apywire.exceptions import FormatError
@@ -57,3 +59,31 @@ def test_exception_hierarchy() -> None:
     assert issubclass(apywire.UnknownPlaceholderError, apywire.WiringError)
     assert issubclass(apywire.CircularWiringError, apywire.WiringError)
     assert issubclass(apywire.LockUnavailableError, RuntimeError)
+
+
+def test_missing_module_error_names_the_import_problem() -> None:
+    """A class path naming an unimportable module says exactly that.
+
+    The common failure for a hand-written config: the module is not
+    installed, or not on sys.path.
+    """
+    wired = apywire.Wiring({"no_such_pkg.Thing x": {}})
+
+    with pytest.raises(apywire.WiringError) as exc_info:
+        wired.x()
+
+    message = str(exc_info.value)
+    assert "failed to instantiate 'x'" in message
+    assert "cannot import module 'no_such_pkg'" in message
+    assert "PYTHONPATH" in message
+
+
+def test_missing_class_error_still_reports_the_underlying_cause() -> None:
+    """A module that imports but lacks the class reports the real error."""
+    wired = apywire.Wiring({"datetime.NoSuchClass x": {}})
+
+    with pytest.raises(apywire.WiringError) as exc_info:
+        wired.x()
+
+    assert "failed to instantiate 'x'" in str(exc_info.value)
+    assert "NoSuchClass" in str(exc_info.value)
