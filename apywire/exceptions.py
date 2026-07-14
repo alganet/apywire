@@ -98,6 +98,16 @@ class LockUnavailableError(RuntimeError):
     """
 
 
+class MergeError(ValueError):
+    """Raised when two specs cannot be overlaid on each other.
+
+    Deliberately not a `WiringError`: that is an `AttributeError`, so a
+    merge failure raised through it could be swallowed by a `hasattr` or
+    `getattr` guard in calling code. A merge is a plain value operation
+    and fails like one.
+    """
+
+
 class FormatError(ValueError):
     """Raised when parsing or serializing a spec in a specific format fails.
 
