@@ -195,6 +195,22 @@ def load(config_path):
 Defaults stay compiled and fast for the common path; a user's config
 extends them rather than restating them.
 
+## Seeing what a config merges to
+
+`merge` prints the effective spec, so "why is my config being ignored?"
+has an answer that doesn't need a REPL:
+
+```bash
+python -m apywire merge --format toml defaults.toml user.toml
+```
+
+The base can be an importable name as well as a file, which is how you
+inspect an overlay against *compiled* defaults:
+
+```bash
+python -m apywire merge --format toml myapp._defaults:spec user.toml
+```
+
 ## Next Steps
 
 - **[Configuration Files](configuration-files.md)** - Loading specs from TOML, JSON or INI

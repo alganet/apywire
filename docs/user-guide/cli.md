@@ -123,6 +123,41 @@ class Compiled:
 compiled = Compiled()
 ```
 
+### merge
+
+Overlay spec files and print the effective spec — what a config *actually*
+merges to. See [Merging Specs](merging.md) for the semantics.
+
+```bash
+python -m apywire merge --format FORMAT [--output-format FORMAT] SOURCE [SOURCE ...]
+```
+
+**Arguments:**
+
+- `--format FORMAT` - Input format: `ini`, `toml`, or `json` (required)
+- `--output-format FORMAT` - Output format (defaults to the input format)
+- `SOURCE` - Specs in overlay order. Each is a file path, `-` for stdin, or
+  an importable `pkg.module:name`
+
+**Examples:**
+
+```bash
+# What does my config actually change?
+python -m apywire merge --format toml defaults.toml user.toml
+
+# Overlay a user's config onto compiled defaults (see --emit-spec)
+python -m apywire merge --format toml myapp._defaults:spec user.toml
+
+# Merge TOML, read the result as JSON
+python -m apywire merge --format toml --output-format json base.toml user.toml
+```
+
+The `pkg.module:name` form is what pairs with `--emit-spec`: a compiled
+container exposes its source spec as a module attribute, and that is the
+base a user's config is overlaid onto.
+
+TOML output requires `tomli_w`; without it, use `--output-format json`.
+
 ## Full Workflow
 
 A typical workflow combines generate and compile:
