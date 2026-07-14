@@ -249,6 +249,15 @@ class WiringRuntime(WiringBase, ThreadSafeMixin):
                 )
             else:
                 constructor = cls
+        except ModuleNotFoundError as e:
+            # The common failure for a hand-written spec: the class path
+            # names a module Python cannot see. Say so, rather than
+            # leaving the reader to infer it from the bare import error.
+            raise WiringError(
+                f"failed to instantiate '{name}': cannot import module "
+                f"'{entry.module_name}' -- it must be installed or "
+                f"importable from sys.path (e.g. via PYTHONPATH)"
+            ) from e
         except Exception as e:
             raise WiringError(f"failed to instantiate '{name}': {e}") from e
 
