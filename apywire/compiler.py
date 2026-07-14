@@ -15,6 +15,7 @@ from typing import cast
 from apywire.constants import (
     CACHE_ATTR_PREFIX,
     PLACEHOLDER_REGEX,
+    SPEC_EMIT_NAME,
     SYNTHETIC_CONST,
 )
 from apywire.wiring import (
@@ -24,6 +25,7 @@ from apywire.wiring import (
     _ConstantValue,
     _ResolvedSpecMapping,
     _ResolvedValue,
+    _SpecValue,
     _WiredRef,
 )
 
@@ -102,6 +104,74 @@ class WiringCompiler(WiringBase):
             elts = [self._astify(v) for v in obj]
             return ast.Tuple(elts=elts, ctx=ast.Load())
         return ast.Constant(cast(_ConstantValue, obj))
+
+    def _astify_spec_value(self, value: _SpecValue) -> ast.expr:
+        """Convert a *source* spec value to AST.
+
+        The spec-side twin of `_astify`. Kept separate on purpose: this
+        one emits literals only, so a placeholder string stays the string
+        ``"{name}"`` instead of becoming a `self.name()` accessor call --
+        the emitted spec has to be re-mergeable and re-wireable, not
+        pre-resolved.
+        """
+        if isinstance(value, dict):
+            keys = [ast.Constant(k) for k in value.keys()]
+            values = [self._astify_spec_value(v) for v in value.values()]
+            return ast.Dict(
+                keys=cast(list[ast.expr | None], keys),
+                values=values,
+            )
+        if isinstance(value, list):
+            return ast.List(
+                elts=[self._astify_spec_value(v) for v in value],
+                ctx=ast.Load(),
+            )
+        if isinstance(value, tuple):
+            return ast.Tuple(
+                elts=[self._astify_spec_value(v) for v in value],
+                ctx=ast.Load(),
+            )
+        return ast.Constant(value)
+
+    def _validate_emittable(self) -> None:
+        """Reject a spec that cannot be emitted as a literal.
+
+        A spec parsed from TOML/JSON/INI is always literal data, but one
+        built in Python may hold arbitrary objects, which have no source
+        representation.
+
+        Raises:
+            ValueError: If a value is not literal, or if the spec wires a
+                module named `spec` (the emitted assignment would shadow
+                the module's own import).
+        """
+        for key, value in self._spec.items():
+            if not self._is_spec_constant(value):
+                raise ValueError(
+                    f"cannot emit spec: the value for key '{key}' is not "
+                    f"a literal"
+                )
+
+        for entry in self._parsed.values():
+            root = entry.module_name.split(".")[0]
+            if root == SPEC_EMIT_NAME:
+                raise ValueError(
+                    f"cannot emit spec: the wired module "
+                    f"'{entry.module_name}' would be shadowed by the "
+                    f"emitted '{SPEC_EMIT_NAME}' assignment"
+                )
+
+    def _compile_spec_assignment(self) -> ast.stmt:
+        """Build the module-level ``spec = {...}`` assignment."""
+        keys = [ast.Constant(k) for k in self._spec.keys()]
+        values = [self._astify_spec_value(v) for v in self._spec.values()]
+        return ast.Assign(
+            targets=[ast.Name(id=SPEC_EMIT_NAME, ctx=ast.Store())],
+            value=ast.Dict(
+                keys=cast(list[ast.expr | None], keys),
+                values=values,
+            ),
+        )
 
     def _normalize_spec_data(
         self, data: _ResolvedSpecMapping
@@ -442,7 +512,13 @@ class WiringCompiler(WiringBase):
                 type_params=[],
             )
 
-    def compile(self, *, aio: bool = False, thread_safe: bool = False) -> str:
+    def compile(
+        self,
+        *,
+        aio: bool = False,
+        thread_safe: bool = False,
+        emit_spec: bool = False,
+    ) -> str:
         """Compiles the Spec into a string containing Python code.
 
         Args:
@@ -452,11 +528,21 @@ class WiringCompiler(WiringBase):
                 ``self.aio.name`` (async accessor attribute access).
             thread_safe: If True, generate thread-safe accessors using
                 ``ThreadSafeMixin``.
+            emit_spec: If True, also emit the source spec as a
+                module-level ``spec`` dict, so the compiled container can
+                be overlaid (see `merge_specs`) and re-wired at runtime.
 
         Returns:
             A string containing the Python source for the compiled
             `Compiled` container.
+
+        Raises:
+            ValueError: If ``emit_spec`` is set and the spec cannot be
+                emitted as a literal.
         """
+        if emit_spec:
+            self._validate_emittable()
+
         # Build AST for the module
         body: list[ast.stmt] = []
 
@@ -622,6 +708,11 @@ class WiringCompiler(WiringBase):
                 type_params=[],
             )
             class_body.append(aio_prop)
+
+        # The spec literal sits between the imports and the container, so
+        # a consumer can read it without instantiating anything.
+        if emit_spec:
+            body.append(self._compile_spec_assignment())
 
         class_body = [ast.Pass()] if not class_body else class_body
         # Build class definition
