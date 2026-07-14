@@ -16,18 +16,20 @@ for that key; the marker is stripped here and never reaches a container.
 
 The merge is exactly two levels deep -- spec, then entry. Values inside
 an entry are constructor arguments, not configuration namespaces, so
-they are replaced wholesale rather than recursed into.
+they are replaced wholesale rather than recursed into, and an append
+marker deeper than that is an error rather than data.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import NamedTuple, TypeAlias, TypeVar, cast
 
 from apywire.constants import APPEND_PREFIX, SPEC_KEY_DELIMITER
 from apywire.exceptions import MergeError
 from apywire.wiring import (
     Spec,
+    SpecEntry,
     SpecParser,
     _ConstantValue,
     _SpecMapping,
@@ -43,8 +45,6 @@ _Ident: TypeAlias = tuple[str, str, str | None]
 # Spec keys are strings; entry keys are strings or positional ints.
 _K = TypeVar("_K", bound=str | int)
 
-_EntryData: TypeAlias = dict[str | int, _SpecValue]
-
 
 class _Entry(NamedTuple):
     """An indexed spec entry, keyed by its exposed name."""
@@ -59,12 +59,13 @@ def merge_specs(base: Spec, *overlays: Spec) -> Spec:
 
     Same-name entries override, new entries are appended, and a
     ``+``-prefixed key appends to the base's list value for that key.
-    Inputs are never mutated.
+    Neither the inputs nor their nested values are mutated, and the
+    result shares no mutable container with them.
 
     Args:
         base: The spec to overlay onto.
         *overlays: Specs applied in order; later ones win. With none,
-            the base is validated and returned as a fresh dict.
+            the base is validated and returned as a copy.
 
     Returns:
         The merged spec, in base order, with overlay-only entries last.
@@ -79,35 +80,20 @@ def merge_specs(base: Spec, *overlays: Spec) -> Spec:
         >>> merge_specs(base, overlay)
         {'pkg.Registry registry': {'repos': ['{a}', '{b}']}}
     """
-    index = _index(base)
-    for overlay in overlays:
-        index = _apply(index, overlay)
+    index: dict[str, _Entry] = {}
+    for spec in (base, *overlays):
+        index = _apply(index, spec)
     return {entry.key: cast(_SpecTop, entry.value) for entry in index.values()}
 
 
-def _index(base: Spec) -> dict[str, _Entry]:
-    """Index a base spec by exposed name, validating it on the way.
+def _apply(index: dict[str, _Entry], spec: Spec) -> dict[str, _Entry]:
+    """Apply one spec over an indexed spec, returning a new index.
 
-    A ``+`` key in a base spec has nothing to append to, so the base is
-    routed through the same entry merger with an empty base -- which is
-    what makes a stray marker an error instead of a leak.
+    The base is folded through this too, over an empty index: a base
+    entry is simply one with nothing to inherit from, and a base ``+``
+    key is one with nothing to append to.
     """
-    plain, appends = _split_appends(base, None)
-    if appends:
-        raise MergeError(_no_target(next(iter(appends)), None))
-
-    index: dict[str, _Entry] = {}
-    seen: dict[str, str] = {}
-    for key, value in plain.items():
-        name, ident = _parse_key(key)
-        _reject_duplicate(seen, name, key)
-        index[name] = _Entry(key, _merged_data(None, value, name), ident)
-    return index
-
-
-def _apply(index: dict[str, _Entry], overlay: Spec) -> dict[str, _Entry]:
-    """Apply one overlay to an indexed spec, returning a new index."""
-    plain, appends = _split_appends(overlay, None)
+    plain, appends = _split_appends(spec, None)
 
     merged = dict(index)
     seen: dict[str, str] = {}
@@ -119,7 +105,7 @@ def _apply(index: dict[str, _Entry], overlay: Spec) -> dict[str, _Entry]:
     for name, value in appends.items():
         existing = merged.get(name)
         if existing is None:
-            raise MergeError(_no_target(name, None))
+            raise MergeError(_no_target(name, None, merged))
         merged[name] = _Entry(
             existing.key,
             _append_list(name, existing.value, value, None),
@@ -137,67 +123,104 @@ def _merge_entry(
 ) -> _Entry:
     """Merge one overlay entry onto the base entry of the same name."""
     if existing is None:
-        return _Entry(key, _merged_data(None, value, name), ident)
+        if ident is None:
+            return _Entry(name, _prepare(value, None), None)
+        return _Entry(key, _wired_data(None, value, name), ident)
 
     if ident is None:
-        # A bare-name key extends the wired entry it names, so a config
-        # need not repeat (and stay in sync with) the class path.
-        if isinstance(value, dict) and existing.ident is not None:
+        # A bare-name key addresses the entry of that name: against a
+        # wired entry it means its arguments, so a config need not repeat
+        # (and stay in sync with) a class path the library owns.
+        if existing.ident is not None:
             return _Entry(
                 existing.key,
-                _merged_data(existing.value, value, name),
+                _wired_data(existing.value, value, name),
                 existing.ident,
             )
-        return _Entry(name, _merged_data(None, value, name), None)
+        return _Entry(name, _prepare(value, None), None)
 
     if ident == existing.ident:
         return _Entry(
             existing.key,
-            _merged_data(existing.value, value, name),
+            _wired_data(existing.value, value, name),
             ident,
         )
 
     # A different type path means the base's arguments belong to another
     # class; inheriting them would pass kwargs the new class may not
     # accept, so replace the entry wholesale (keeping the base's slot).
-    return _Entry(key, _merged_data(None, value, name), ident)
+    return _Entry(key, _wired_data(None, value, name), ident)
 
 
-def _merged_data(
+def _wired_data(
     base_value: _SpecValue | None,
     overlay_value: _SpecValue,
     name: str,
 ) -> _SpecValue:
-    """Merge an entry's data, one level deep.
+    """Merge a wired entry's constructor arguments.
 
-    A non-dict overlay value replaces the base wholesale. A ``None``
-    base means "nothing to inherit" -- used both when indexing a base
-    spec and when an overlay replaces an entry outright.
+    A dict is keyword arguments and merges key by key; a list is
+    positional arguments and replaces wholesale. A ``None`` base means
+    "nothing to inherit" -- a new entry, or one whose type path changed.
     """
-    if not isinstance(overlay_value, dict):
-        return overlay_value
-    base_data: _EntryData = base_value if isinstance(base_value, dict) else {}
-    return _merge_entry_data(base_data, overlay_value, name)
+    if isinstance(overlay_value, dict):
+        base_data: SpecEntry = (
+            base_value if isinstance(base_value, dict) else {}
+        )
+        return _merge_entry_data(base_data, overlay_value, name)
+    if isinstance(overlay_value, list):
+        return _prepare(overlay_value, name)
+
+    # Demoting the entry to a constant would silently drop its class.
+    raise MergeError(
+        f"cannot give wired entry '{name}' a "
+        f"{type(overlay_value).__name__} as its arguments: expected a "
+        f"table (keyword arguments) or a list (positional arguments)"
+    )
 
 
 def _merge_entry_data(
-    base_data: _EntryData,
-    overlay_data: _EntryData,
+    base_data: SpecEntry,
+    overlay_data: SpecEntry,
     context: str,
-) -> _EntryData:
-    """Merge two entries' data dicts, applying any ``+`` markers."""
+) -> SpecEntry:
+    """Merge two entries' argument dicts, applying any ``+`` markers."""
     plain, appends = _split_appends(overlay_data, context)
 
-    merged: _EntryData = dict(base_data)
-    for key, value in plain.items():
-        merged[key] = value
+    merged: SpecEntry = dict(base_data)
+    merged.update({k: _prepare(v, context) for k, v in plain.items()})
 
     for name, value in appends.items():
         if name not in base_data:
-            raise MergeError(_no_target(name, context))
+            raise MergeError(_no_target(name, context, base_data))
         # Assigning an existing key keeps it in the base's position.
         merged[name] = _append_list(name, base_data[name], value, context)
     return merged
+
+
+def _prepare(value: _SpecValue, context: str | None) -> _SpecValue:
+    """Copy a value, rejecting append markers below where they mean something.
+
+    Markers are interpreted at the top level of a spec and of a wired
+    entry's arguments. Deeper down a value is opaque data, so a ``+`` key
+    there would be handed to a constructor verbatim; reject it instead of
+    silently passing it through. Containers are rebuilt so the merged
+    spec shares no mutable state with the specs it came from.
+    """
+    if isinstance(value, dict):
+        for key in value:
+            if isinstance(key, str) and key.startswith(APPEND_PREFIX):
+                raise MergeError(
+                    f"invalid key '{key}'{_where(context)}: the "
+                    f"'{APPEND_PREFIX}' append marker is only supported "
+                    f"at the top level of a spec or of a wired entry"
+                )
+        return {k: _prepare(v, context) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_prepare(v, context) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_prepare(v, context) for v in value)
+    return value
 
 
 def _split_appends(
@@ -207,21 +230,24 @@ def _split_appends(
     """Split a mapping into plain keys and stripped ``+`` append keys.
 
     Args:
-        mapping: A spec (``context`` is None) or an entry's data.
+        mapping: A spec (``context`` is None) or an entry's arguments.
         context: The entry name, for error messages; None at spec level.
 
     Returns:
         The plain keys, and the append keys with the marker stripped.
 
     Raises:
-        MergeError: On a marker that cannot mean anything: on a wired
-            key, on a positional key, or alongside its own plain key.
+        MergeError: On a marker that cannot mean anything: an unknown
+            one, or ``+`` on a wired key, on a positional key, or
+            alongside its own plain key.
     """
     plain: dict[_K, _SpecValue] = {}
     appends: dict[str, _SpecValue] = {}
 
     for key, value in mapping.items():
         if not isinstance(key, str) or not key.startswith(APPEND_PREFIX):
+            if isinstance(key, str):
+                _reject_unknown_marker(key, context)
             plain[key] = value
             continue
 
@@ -240,11 +266,28 @@ def _split_appends(
             )
         if name in mapping:
             raise MergeError(
-                f"conflicting keys '{name}' and '{key}'" f"{_where(context)}"
+                f"conflicting keys '{name}' and '{key}'{_where(context)}"
             )
         appends[name] = value
 
     return plain, appends
+
+
+def _reject_unknown_marker(key: str, context: str | None) -> None:
+    """Reject a key that looks like a marker but is not one.
+
+    ``-key`` and ``^key`` are the natural guesses for "remove" and
+    "prepend" once ``+key`` is known. Neither exists, and a spec key or
+    an argument name never legitimately starts with punctuation, so
+    passing one through as data would silently misconfigure a container.
+    """
+    first = key[:1]
+    if first and not (first.isalnum() or first == "_"):
+        raise MergeError(
+            f"unknown merge marker '{first}' in key "
+            f"'{key}'{_where(context)}: only '{APPEND_PREFIX}' (append) "
+            f"is supported"
+        )
 
 
 def _append_list(
@@ -265,7 +308,8 @@ def _append_list(
             f"invalid value for '{APPEND_PREFIX}{name}'{where}: expected "
             f"a list, got {type(overlay_value).__name__}"
         )
-    return [*base_value, *overlay_value]
+    prepared = _prepare(overlay_value, context)
+    return [*base_value, *cast("list[_SpecValue]", prepared)]
 
 
 def _parse_key(key: str) -> tuple[str, _Ident | None]:
@@ -288,14 +332,19 @@ def _reject_duplicate(seen: dict[str, str], name: str, key: str) -> None:
     seen[name] = key
 
 
-def _no_target(name: str, context: str | None) -> str:
+def _no_target(
+    name: str,
+    context: str | None,
+    known: Iterable[str | int],
+) -> str:
     """Message for a ``+`` key with no matching base key."""
+    names = ", ".join(sorted(str(k) for k in known)) or "none"
     return (
         f"cannot append to '{name}'{_where(context)}: the base has no "
-        f"such key"
+        f"such key (known keys: {names})"
     )
 
 
 def _where(context: str | None) -> str:
     """Render the entry context for an error message, if any."""
-    return f" in entry '{context}'" if context else ""
+    return f" in entry '{context}'" if context is not None else ""

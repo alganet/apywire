@@ -14,6 +14,8 @@ from typing import cast
 
 from apywire.constants import (
     CACHE_ATTR_PREFIX,
+    DEFAULT_LOCK_RETRY_SLEEP,
+    DEFAULT_MAX_LOCK_ATTEMPTS,
     PLACEHOLDER_REGEX,
     SPEC_EMIT_NAME,
     SYNTHETIC_CONST,
@@ -43,17 +45,43 @@ _PROPERTY_ARGS = ast.arguments(
 class WiringCompiler(WiringBase):
     """Wiring container with compilation support."""
 
+    _spec: Spec
+
+    def __init__(
+        self,
+        spec: Spec,
+        *,
+        thread_safe: bool = False,
+        max_lock_attempts: int = DEFAULT_MAX_LOCK_ATTEMPTS,
+        lock_retry_sleep: float = DEFAULT_LOCK_RETRY_SLEEP,
+    ) -> None:
+        """Initialize a compiler, keeping the source spec.
+
+        `_parsed`/`_values` are a lossy decomposition of the spec, so the
+        source is kept for `compile(emit_spec=True)`. It lives here and
+        not on `WiringBase` because the runtime container resolves
+        unknown attributes as wired entries -- an attribute there would
+        shadow an entry of the same name, and every private name it holds
+        is a name a spec can no longer use.
+        """
+        super().__init__(
+            spec,
+            thread_safe=thread_safe,
+            max_lock_attempts=max_lock_attempts,
+            lock_retry_sleep=lock_retry_sleep,
+        )
+        self._spec = dict(spec)
+
     @property
     def spec(self) -> Spec:
-        """The source spec this compiler was built from (a copy).
+        """The source spec this compiler was built from.
 
-        Exposed here rather than on `WiringBase` because the runtime
-        container resolves unknown attributes as wired entries: a `spec`
-        property there would shadow an entry literally named `spec`.
+        A shallow copy: the entries themselves are shared, so treat it as
+        read-only.
         """
         return dict(self._spec)
 
-    def _astify(self, obj: _ResolvedValue) -> ast.expr:
+    def _astify(self, obj: _ResolvedValue | _SpecValue) -> ast.expr:
         """Convert a Python object (possibly a `_WiredRef`) to AST.
 
         Nested lists, tuples and dicts are supported. `_WiredRef` becomes
@@ -61,6 +89,11 @@ class WiringCompiler(WiringBase):
 
         `_AioWiredRef` becomes ``self.aio.<name>`` (an async accessor
         attribute access, no call).
+
+        A *source* spec value carries no refs -- placeholders are still
+        plain strings at that point -- so this also emits the spec
+        literal for `emit_spec`, where `"{name}"` must stay a string
+        rather than become an accessor call.
         """
         if isinstance(obj, _AioWiredRef):
             # self.aio.name — attribute access, not a call
@@ -105,34 +138,6 @@ class WiringCompiler(WiringBase):
             return ast.Tuple(elts=elts, ctx=ast.Load())
         return ast.Constant(cast(_ConstantValue, obj))
 
-    def _astify_spec_value(self, value: _SpecValue) -> ast.expr:
-        """Convert a *source* spec value to AST.
-
-        The spec-side twin of `_astify`. Kept separate on purpose: this
-        one emits literals only, so a placeholder string stays the string
-        ``"{name}"`` instead of becoming a `self.name()` accessor call --
-        the emitted spec has to be re-mergeable and re-wireable, not
-        pre-resolved.
-        """
-        if isinstance(value, dict):
-            keys = [ast.Constant(k) for k in value.keys()]
-            values = [self._astify_spec_value(v) for v in value.values()]
-            return ast.Dict(
-                keys=cast(list[ast.expr | None], keys),
-                values=values,
-            )
-        if isinstance(value, list):
-            return ast.List(
-                elts=[self._astify_spec_value(v) for v in value],
-                ctx=ast.Load(),
-            )
-        if isinstance(value, tuple):
-            return ast.Tuple(
-                elts=[self._astify_spec_value(v) for v in value],
-                ctx=ast.Load(),
-            )
-        return ast.Constant(value)
-
     def _validate_emittable(self) -> None:
         """Reject a spec that cannot be emitted as a literal.
 
@@ -164,7 +169,7 @@ class WiringCompiler(WiringBase):
     def _compile_spec_assignment(self) -> ast.stmt:
         """Build the module-level ``spec = {...}`` assignment."""
         keys = [ast.Constant(k) for k in self._spec.keys()]
-        values = [self._astify_spec_value(v) for v in self._spec.values()]
+        values = [self._astify(v) for v in self._spec.values()]
         return ast.Assign(
             targets=[ast.Name(id=SPEC_EMIT_NAME, ctx=ast.Store())],
             value=ast.Dict(

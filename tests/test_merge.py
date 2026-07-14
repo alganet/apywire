@@ -4,12 +4,14 @@
 
 """Tests for overlaying wiring specs with merge_specs."""
 
+import doctest
 import sys
 from types import ModuleType
 from typing import Protocol
 
 import pytest
 
+import apywire.merge
 from apywire import MergeError, Wiring, WiringCompiler, merge_specs
 from apywire.formats import ini_to_spec, json_to_spec, toml_to_spec
 from apywire.wiring import Spec
@@ -88,11 +90,24 @@ def test_merge_bare_name_dict_extends_wired_entry() -> None:
     assert "registry" not in merged
 
 
-def test_merge_bare_name_scalar_replaces_wired_entry() -> None:
-    """A bare-name scalar turns a wired entry into a constant."""
-    merged = merge_specs(_base(), {"registry": 5})
-    assert merged["registry"] == 5
-    assert REGISTRY_KEY not in merged
+def test_merge_bare_name_scalar_on_wired_entry_raises() -> None:
+    """A scalar cannot be a wired entry's arguments.
+
+    Accepting it would silently demote the entry to a constant and drop
+    its class path -- the container would hand back the scalar.
+    """
+    with pytest.raises(MergeError, match="expected a table"):
+        merge_specs(_base(), {"registry": 5})
+
+
+def test_merge_bare_name_list_keeps_the_wired_entry() -> None:
+    """A bare-name list replaces an entry's positional arguments."""
+    merged = merge_specs(
+        {"merge_module.Registry registry": ["{alpha}"], "alpha": "A"},
+        {"registry": ["{alpha}", "{alpha}"]},
+    )
+    assert merged["merge_module.Registry registry"] == ["{alpha}", "{alpha}"]
+    assert "registry" not in merged
 
 
 def test_merge_constant_replaced_by_wired_entry() -> None:
@@ -328,6 +343,84 @@ def test_merge_append_non_list_value_raises() -> None:
     """A '+' key's value must be a list."""
     with pytest.raises(MergeError, match="expected a list, got str"):
         merge_specs(_base(), {"registry": {"+repos": "{beta}"}})
+
+
+def test_merge_nested_append_marker_raises() -> None:
+    """A '+' deeper than an entry's arguments is not a marker.
+
+    The merge does not recurse into an argument's value, so a marker
+    there would be handed to the constructor as a literal key.
+    """
+    with pytest.raises(MergeError, match="only supported at the top level"):
+        merge_specs(
+            {"merge_module.Registry registry": {"conf": {"items": [1]}}},
+            {"registry": {"conf": {"+items": [2]}}},
+        )
+
+
+def test_merge_append_marker_inside_a_constant_raises() -> None:
+    """A constant's value is opaque data, not a merge namespace."""
+    with pytest.raises(MergeError, match="only supported at the top level"):
+        merge_specs({"opts": {"paths": ["a"]}}, {"opts": {"+paths": ["b"]}})
+
+
+def test_merge_unknown_marker_raises() -> None:
+    """'-key' and friends are the natural wrong guesses; reject them.
+
+    Passing one through as data would silently misconfigure a container
+    instead of saying that removal is not supported.
+    """
+    with pytest.raises(MergeError, match="unknown merge marker '-'"):
+        merge_specs(_base(), {"registry": {"-repos": ["{alpha}"]}})
+
+
+def test_merge_unknown_top_level_marker_raises() -> None:
+    """The same holds for a spec-level key."""
+    with pytest.raises(MergeError, match="unknown merge marker"):
+        merge_specs({"a": 1}, {"^a": 2})
+
+
+def test_merge_copies_every_container_shape() -> None:
+    """Tuples nested in a value are rebuilt like dicts and lists."""
+    base: Spec = {"merge_module.Registry registry": {"pairs": [(1, [2])]}}
+    merged = merge_specs(base, {"registry": {"cache": "/var"}})
+
+    entry = merged["merge_module.Registry registry"]
+    assert isinstance(entry, dict)
+    assert entry["pairs"] == [(1, [2])]
+
+    original = base["merge_module.Registry registry"]
+    assert isinstance(original, dict)
+    assert entry["pairs"] is not original["pairs"]
+
+
+def test_merge_result_shares_no_mutable_state_with_inputs() -> None:
+    """Mutating a merged spec cannot corrupt the base or a later merge."""
+    base = _base()
+    first = merge_specs(base, {"registry": {"cache": "/var"}})
+
+    entry = first[REGISTRY_KEY]
+    assert isinstance(entry, dict)
+    repos = entry["repos"]
+    assert isinstance(repos, list)
+    repos.append("{POISON}")
+
+    assert base == _base()
+    second = merge_specs(base, {"registry": {"cache": "/opt"}})
+    assert second[REGISTRY_KEY] == {"repos": ["{alpha}"], "cache": "/opt"}
+
+
+def test_merge_no_target_error_lists_the_known_keys() -> None:
+    """The error says what the base actually offers."""
+    with pytest.raises(MergeError, match="known keys: cache, repos"):
+        merge_specs(_base(), {"registry": {"+repose": ["{beta}"]}})
+
+
+def test_merge_specs_docstring_example_is_correct() -> None:
+    """The doctest in merge_specs is executed, not just written."""
+    results = doctest.testmod(apywire.merge, verbose=False)
+    assert results.attempted > 0
+    assert results.failed == 0
 
 
 def test_merge_malformed_key_raises_value_error() -> None:

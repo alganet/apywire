@@ -51,9 +51,11 @@ Specs [overlay](docs/user-guide/merging.md), so a library can ship defaults
 and a user's config can extend them instead of restating them:
 
 ```python
-from apywire import merge_specs
+from apywire import Wiring, merge_specs
 
+defaults = {"myapp.Registry registry": {"repos": ["{builtin}"]}}
 user = {"registry": {"+repos": ["{my_repo}"]}}  # append, don't replace
+
 wired = Wiring(merge_specs(defaults, user))
 ```
 
