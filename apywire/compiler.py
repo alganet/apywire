@@ -18,6 +18,7 @@ from apywire.constants import (
     SYNTHETIC_CONST,
 )
 from apywire.wiring import (
+    Spec,
     WiringBase,
     _AioWiredRef,
     _ConstantValue,
@@ -39,6 +40,16 @@ _PROPERTY_ARGS = ast.arguments(
 
 class WiringCompiler(WiringBase):
     """Wiring container with compilation support."""
+
+    @property
+    def spec(self) -> Spec:
+        """The source spec this compiler was built from (a copy).
+
+        Exposed here rather than on `WiringBase` because the runtime
+        container resolves unknown attributes as wired entries: a `spec`
+        property there would shadow an entry literally named `spec`.
+        """
+        return dict(self._spec)
 
     def _astify(self, obj: _ResolvedValue) -> ast.expr:
         """Convert a Python object (possibly a `_WiredRef`) to AST.

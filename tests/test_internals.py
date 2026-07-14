@@ -95,3 +95,36 @@ def test_topological_sort_raises_on_cycle() -> None:
     w = apywire.Wiring({}, thread_safe=False)
     with pytest.raises(CircularWiringError):
         w._topological_sort({"a": {"b"}, "b": {"a"}})
+
+
+def test_wiring_base_retains_source_spec_copy() -> None:
+    """The source spec is kept, and kept isolated from the caller."""
+    spec: apywire.Spec = {"datetime.date d": {"year": 2000}, "y": 1}
+    w = apywire.Wiring(spec, thread_safe=False)
+
+    assert w._spec == spec
+    assert w._spec is not spec
+
+
+def test_compiler_spec_property_returns_copy() -> None:
+    """The compiler exposes its source spec, defensively copied."""
+    spec: apywire.Spec = {"datetime.date d": {"year": 2000}}
+    compiler = apywire.WiringCompiler(spec)
+
+    assert compiler.spec == spec
+    assert compiler.spec is not compiler._spec
+
+
+def test_runtime_entry_named_spec_still_returns_accessor() -> None:
+    """A spec entry named 'spec' is not shadowed by an attribute.
+
+    Pins why `spec` is exposed on the compiler and not on WiringBase: the
+    runtime container resolves unknown attributes as wired entries, so a
+    `spec` property here would silently shadow this entry.
+    """
+    import datetime
+
+    w = apywire.Wiring(
+        {"datetime.date spec": {"year": 2000, "month": 1, "day": 1}}
+    )
+    assert w.spec() == datetime.date(2000, 1, 1)
