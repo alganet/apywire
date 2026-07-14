@@ -53,6 +53,19 @@ def test_compile_emit_spec_roundtrips_original_spec() -> None:
     assert _exec(code)["spec"] == spec
 
 
+def test_compile_emit_spec_writes_one_entry_per_line() -> None:
+    """A compiled defaults module is committed, so it must diff readably.
+
+    Unparsed as one expression, changing a single default would rewrite
+    one enormous line.
+    """
+    code = WiringCompiler(_spec()).compile(emit_spec=True)
+
+    assert "spec = {\n" in code
+    assert "    'year': 1990,\n" in code
+    assert "    'datetime.date birthday': {" in code
+
+
 def test_compile_emit_spec_preserves_placeholder_strings() -> None:
     """Placeholders survive verbatim, so the spec can be re-wired."""
     code = WiringCompiler(_spec()).compile(emit_spec=True)

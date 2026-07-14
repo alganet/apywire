@@ -14,6 +14,7 @@ from typing import cast
 
 from apywire.constants import (
     CACHE_ATTR_PREFIX,
+    COMPILED_CLASS_NAME,
     DEFAULT_LOCK_RETRY_SLEEP,
     DEFAULT_MAX_LOCK_ATTEMPTS,
     PLACEHOLDER_REGEX,
@@ -166,17 +167,26 @@ class WiringCompiler(WiringBase):
                     f"emitted '{SPEC_EMIT_NAME}' assignment"
                 )
 
-    def _compile_spec_assignment(self) -> ast.stmt:
-        """Build the module-level ``spec = {...}`` assignment."""
-        keys = [ast.Constant(k) for k in self._spec.keys()]
-        values = [self._astify(v) for v in self._spec.values()]
-        return ast.Assign(
-            targets=[ast.Name(id=SPEC_EMIT_NAME, ctx=ast.Store())],
-            value=ast.Dict(
-                keys=cast(list[ast.expr | None], keys),
-                values=values,
-            ),
-        )
+    def _compile_spec_source(self) -> str:
+        """Render the module-level ``spec = {...}`` assignment as source.
+
+        Written one entry per line rather than unparsed as a single
+        expression: a compiled defaults module is a committed artifact, so
+        changing one default should produce a one-line diff, not rewrite a
+        two-thousand-character line.
+
+        Each entry still goes through `ast.unparse`, which is the only
+        thing that reliably round-trips every literal a spec can hold --
+        ``pprint`` would render ``inf`` and ``nan`` as bare names that do
+        not evaluate.
+        """
+        lines = [f"{SPEC_EMIT_NAME} = {{"]
+        for key, value in self._spec.items():
+            key_src = ast.unparse(ast.Constant(key))
+            value_src = ast.unparse(self._astify(value))
+            lines.append(f"    {key_src}: {value_src},")
+        lines.append("}")
+        return "\n".join(lines)
 
     def _normalize_spec_data(
         self, data: _ResolvedSpecMapping
@@ -714,18 +724,13 @@ class WiringCompiler(WiringBase):
             )
             class_body.append(aio_prop)
 
-        # The spec literal sits between the imports and the container, so
-        # a consumer can read it without instantiating anything.
-        if emit_spec:
-            body.append(self._compile_spec_assignment())
-
         class_body = [ast.Pass()] if not class_body else class_body
         # Build class definition
         class_bases: list[ast.expr] = []
         if thread_safe:
             class_bases.append(ast.Name(id="ThreadSafeMixin", ctx=ast.Load()))
         class_def = ast.ClassDef(
-            name="Compiled",
+            name=COMPILED_CLASS_NAME,
             bases=class_bases,
             keywords=[],
             body=class_body,
@@ -738,7 +743,7 @@ class WiringCompiler(WiringBase):
         assign = ast.Assign(
             targets=[ast.Name(id="compiled", ctx=ast.Store())],
             value=ast.Call(
-                func=ast.Name(id="Compiled", ctx=ast.Load()),
+                func=ast.Name(id=COMPILED_CLASS_NAME, ctx=ast.Load()),
                 args=[],
                 keywords=[],
             ),
@@ -749,5 +754,24 @@ class WiringCompiler(WiringBase):
         module_ast = ast.Module(body=body, type_ignores=[])
         ast.fix_missing_locations(module_ast)
 
-        # Unparse to string
-        return ast.unparse(module_ast)
+        code = ast.unparse(module_ast)
+        if emit_spec:
+            code = self._splice_spec_source(code)
+        return code
+
+    def _splice_spec_source(self, code: str) -> str:
+        """Insert the spec literal between the imports and the container.
+
+        Spliced as text rather than unparsed with the rest of the module,
+        so it can be written one entry per line (see
+        `_compile_spec_source`). It goes above `class Compiled` so a
+        consumer can read the spec without instantiating anything.
+        """
+        lines = code.split("\n")
+        at = next(
+            i
+            for i, line in enumerate(lines)
+            if line.startswith(f"class {COMPILED_CLASS_NAME}")
+        )
+        spec_lines = self._compile_spec_source().split("\n")
+        return "\n".join([*lines[:at], *spec_lines, "", *lines[at:]])

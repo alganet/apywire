@@ -5,6 +5,8 @@
 import subprocess
 import sys
 from io import StringIO
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 import pytest
@@ -319,3 +321,121 @@ def test_cli_compile_emit_spec_unemittable_spec_errors() -> None:
 
     assert result == 1
     assert "Error compiling spec" in mock_stderr.getvalue()
+
+
+def test_cli_merge_overlays_specs_and_prints_result() -> None:
+    """merge prints the effective spec, so a config can be inspected."""
+    base = '{"y": 1, "datetime.date d": {"year": "{y}"}}'
+    with patch("sys.stdin", StringIO(base)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(["merge", "--format", "json", "-"])
+
+    assert result == 0
+    assert '"y": 1' in mock_stdout.getvalue()
+
+
+def test_cli_merge_converts_between_formats() -> None:
+    """The output format defaults to the input's, and can be chosen."""
+    base = '{"y": 1}'
+    with patch("sys.stdin", StringIO(base)):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(
+                ["merge", "--format", "json", "--output-format", "ini", "-"]
+            )
+
+    assert result == 0
+    assert "y = 1" in mock_stdout.getvalue()
+
+
+class SpecModule(ModuleType):
+    """A module exposing an emitted spec, as --emit-spec produces."""
+
+    def __init__(self, name: str, spec: object) -> None:
+        super().__init__(name)
+        self.spec = spec
+
+
+def test_cli_merge_overlays_files(tmp_path: Path) -> None:
+    """Specs are read from files, in overlay order."""
+    base = tmp_path / "base.json"
+    base.write_text('{"y": 1, "z": 1}')
+    user = tmp_path / "user.json"
+    user.write_text('{"y": 9}')
+
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        result = main(["merge", "--format", "json", str(base), str(user)])
+
+    assert result == 0
+    output = mock_stdout.getvalue()
+    assert '"y": 9' in output
+    assert '"z": 1' in output
+
+
+def test_cli_merge_reads_a_spec_from_an_importable_name() -> None:
+    """A compiled container's emitted spec is a valid merge source."""
+    sys.modules["cli_spec_module"] = SpecModule("cli_spec_module", {"y": 1})
+    try:
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            result = main(
+                ["merge", "--format", "json", "cli_spec_module:spec"]
+            )
+    finally:
+        del sys.modules["cli_spec_module"]
+
+    assert result == 0
+    assert '"y": 1' in mock_stdout.getvalue()
+
+
+def test_cli_merge_importable_name_that_is_not_a_spec_errors() -> None:
+    """Pointing at a non-dict attribute fails with a message."""
+    sys.modules["cli_bad_module"] = SpecModule("cli_bad_module", "not a spec")
+    try:
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            result = main(["merge", "--format", "json", "cli_bad_module:spec"])
+    finally:
+        del sys.modules["cli_bad_module"]
+
+    assert result == 1
+    assert "not a spec dict" in mock_stderr.getvalue()
+
+
+def test_cli_merge_missing_file_errors() -> None:
+    """An unreadable source is reported, not traced."""
+    with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+        result = main(["merge", "--format", "json", "/nonexistent/spec.json"])
+
+    assert result == 1
+    assert "Error reading" in mock_stderr.getvalue()
+
+
+def test_cli_merge_unmergeable_specs_error() -> None:
+    """A merge failure is a message and exit 1, not a traceback."""
+    bad = '{"pkg.C c": {"-x": [1]}}'
+    with patch("sys.stdin", StringIO(bad)):
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            result = main(["merge", "--format", "json", "-"])
+
+    assert result == 1
+    assert "Error merging specs" in mock_stderr.getvalue()
+    assert "unknown merge marker" in mock_stderr.getvalue()
+
+
+def test_cli_merge_unwritable_output_format_errors() -> None:
+    """A serializer that cannot run is reported, not traced."""
+    with patch("sys.stdin", StringIO('{"y": 1}')):
+        with patch("apywire.__main__.spec_to_toml") as to_toml:
+            to_toml.side_effect = ValueError("TOML output requires tomli_w.")
+            with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+                result = main(
+                    [
+                        "merge",
+                        "--format",
+                        "json",
+                        "--output-format",
+                        "toml",
+                        "-",
+                    ]
+                )
+
+    assert result == 1
+    assert "Error writing TOML" in mock_stderr.getvalue()

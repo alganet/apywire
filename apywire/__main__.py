@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 from importlib.metadata import version
 from typing import Callable, cast
@@ -21,6 +22,7 @@ from apywire.formats import (
     toml_to_spec,
 )
 from apywire.generator import Generator
+from apywire.merge import merge_specs
 from apywire.wiring import Spec
 
 _FORMAT_CHOICES: tuple[str, ...] = ("ini", "toml", "json")
@@ -57,6 +59,79 @@ def cmd_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_spec(fmt: str, content: str) -> Spec:
+    """Parse spec content in one of the supported formats."""
+    if fmt == "ini":
+        return ini_to_spec(content)
+    if fmt == "toml":
+        return toml_to_spec(content)
+    return json_to_spec(content)
+
+
+def _serialize_spec(fmt: str, spec: Spec) -> str:
+    """Serialize a spec in one of the supported formats."""
+    if fmt == "ini":
+        return spec_to_ini(spec)
+    if fmt == "toml":
+        return spec_to_toml(spec)
+    return spec_to_json(spec)
+
+
+def _read_spec(source: str, fmt: str) -> Spec:
+    """Read a spec from a file, from stdin, or from an importable name.
+
+    The importable form (``pkg.module:name``) is what makes this useful
+    against compiled defaults: a container emitted with ``--emit-spec``
+    exposes its source spec as a module attribute, and that is exactly
+    the base a user's config is overlaid onto.
+    """
+    if ":" in source:
+        module_name, _, attr = source.partition(":")
+        module = importlib.import_module(module_name)
+        value = cast(object, getattr(module, attr))
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"'{source}' is a {type(value).__name__}, not a spec dict"
+            )
+        return cast(Spec, value)
+
+    content: str
+    if source == "-":
+        content = sys.stdin.read()
+    else:
+        with open(source, encoding="utf-8") as f:
+            content = f.read()
+    return _parse_spec(fmt, content)
+
+
+def cmd_merge(args: argparse.Namespace) -> int:
+    """Handle the merge command."""
+    fmt: str = cast(str, args.format)
+    out_fmt: str = cast(str | None, args.output_format) or fmt
+    sources: list[str] = cast("list[str]", args.sources)
+
+    specs: list[Spec] = []
+    for source in sources:
+        try:
+            specs.append(_read_spec(source, fmt))
+        except Exception as e:
+            print(f"Error reading '{source}': {e}", file=sys.stderr)
+            return 1
+
+    try:
+        merged = merge_specs(specs[0], *specs[1:])
+    except ValueError as e:
+        print(f"Error merging specs: {e}", file=sys.stderr)
+        return 1
+
+    try:
+        print(_serialize_spec(out_fmt, merged))
+    except Exception as e:
+        print(f"Error writing {out_fmt.upper()}: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_compile(args: argparse.Namespace) -> int:
     """Handle the compile command."""
     input_file: str = cast(str, args.input_file)
@@ -78,15 +153,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
 
     spec: Spec
     try:
-        if fmt == "ini":
-            spec = ini_to_spec(content)
-        elif fmt == "toml":
-            spec = toml_to_spec(content)
-        elif fmt == "json":
-            spec = json_to_spec(content)
-        else:
-            print(f"Unknown format: {fmt}", file=sys.stderr)
-            return 1
+        spec = _parse_spec(fmt, content)
     except Exception as e:
         # Handle FormatError with user-friendly messages
         print(f"Error parsing {fmt.upper()} content: {e}", file=sys.stderr)
@@ -193,6 +260,46 @@ def main(argv: list[str] | None = None) -> int:
         help="Input spec file path, or '-' to read from stdin",
     )
     compile_parser.set_defaults(func=cmd_compile)
+
+    merge_parser = subparsers.add_parser(
+        "merge",
+        help="Overlay spec files and print the effective spec",
+        description=(
+            "Overlay spec files left to right and print the result. Use it "
+            "to see what a config actually merges to."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  apywire merge --format toml defaults.toml user.toml\n"
+            "  apywire merge --format toml --output-format json "
+            "defaults.toml user.toml\n"
+            "  apywire merge --format toml myapp._defaults:spec user.toml"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    merge_parser.add_argument(
+        "--format",
+        required=True,
+        choices=_FORMAT_CHOICES,
+        metavar="FORMAT",
+        help="Input format: ini, toml, or json (required)",
+    )
+    merge_parser.add_argument(
+        "--output-format",
+        choices=_FORMAT_CHOICES,
+        metavar="FORMAT",
+        help="Output format (defaults to the input format)",
+    )
+    merge_parser.add_argument(
+        "sources",
+        metavar="SOURCE",
+        nargs="+",
+        help=(
+            "Spec files, in overlay order: a path, '-' for stdin, or an "
+            "importable 'pkg.module:name' (e.g. a compiled spec)"
+        ),
+    )
+    merge_parser.set_defaults(func=cmd_merge)
 
     args = parser.parse_args(argv)
 

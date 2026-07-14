@@ -26,6 +26,8 @@ SYNTHETIC_CONST = "__sconst__"  # Synthetic module for promoted constants
 
 SPEC_EMIT_NAME = "spec"  # Module-level name for a compiled spec literal
 
+COMPILED_CLASS_NAME = "Compiled"  # Class name in generated code
+
 CACHE_ATTR_PREFIX = "_"  # Prefix for cache attributes (_name)
 
 # Thread-safety defaults: max retries and per-retry sleep when falling back
