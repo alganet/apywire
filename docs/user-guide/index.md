@@ -16,6 +16,9 @@ Learn the fundamentals of using apywire, including creating wiring containers, d
 ### [Configuration Files](configuration-files.md)
 Load specs from YAML, TOML, JSON, or INI files. Mix configuration files with environment variables and implement environment-based configs.
 
+### [Merging Specs](merging.md)
+Overlay one spec on another with `merge_specs`: let a user's config extend a library's defaults instead of restating them, override entries by name, and append to list values.
+
 ### [Async Support](async-support.md)
 Discover how to use apywire in asynchronous contexts with `await wired.aio.name()` for async object access.
 
@@ -46,6 +49,7 @@ apywire is designed around a few core principles:
 Looking for something specific?
 
 - **Getting started?** → [Basic Usage](basic-usage.md)
+- **Shipping defaults users can extend?** → [Merging Specs](merging.md)
 - **Need async?** → [Async Support](async-support.md)
 - **Multi-threaded app?** → [Thread Safety](thread-safety.md)
 - **Production deployment?** → [Compilation](compilation.md)

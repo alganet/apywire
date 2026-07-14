@@ -135,6 +135,7 @@ apywire/
 │   ├── wiring.py         # Base wiring functionality
 │   ├── runtime.py        # Runtime wiring implementation
 │   ├── compiler.py       # Code generation
+│   ├── merge.py          # Spec overlays (merge_specs)
 │   ├── threads.py        # Thread safety utilities
 │   ├── exceptions.py     # Exception classes
 │   ├── constants.py      # Constants and configuration
@@ -275,6 +276,7 @@ See `apywire/compiler.py` for the implementation.
 - **`wiring.py`**: Base class, type system, placeholder parsing
 - **`runtime.py`**: Runtime `Wiring` implementation, `Accessor`/`AioAccessor`
 - **`compiler.py`**: Code generation via `WiringCompiler`
+- **`merge.py`**: Spec overlays via `merge_specs` — a pure `Spec` -> `Spec` transform applied *before* wiring, so it adds no runtime or compiled semantics to keep in sync
 - **`threads.py`**: Thread safety mixins and utilities
 - **`exceptions.py`**: Custom exception classes
 - **`constants.py`**: Shared constants (delimiter, placeholder markers)

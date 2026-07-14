@@ -522,9 +522,19 @@ service_spec = {
 }
 
 # Merge them
-full_spec = {**config_spec, **infra_spec, **service_spec}
+full_spec = merge_specs(config_spec, infra_spec, service_spec)
 wired = Wiring(full_spec)
 ```
+
+!!! warning "Use `merge_specs`, not `{**a, **b}`"
+
+    A dict merge combines specs by *key string*, but entries are
+    identified by their **exposed name**. Two keys naming the same entry
+    with different class paths — `"pkg.Cache cache"` and
+    `"mine.Cache cache"` — are different strings, so both survive the
+    dict merge, and `Wiring` then silently keeps only one of them.
+    [`merge_specs`](merging.md) matches on the name, deep-merges
+    same-name entries, and supports appending to list values.
 
 ### 5. Use Constants for Configuration
 

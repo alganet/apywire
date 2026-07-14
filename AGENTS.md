@@ -42,6 +42,7 @@ The project uses extremely strict mypy settings including `disallow_any_expr=tru
 - `wiring.py`: Base class `WiringBase`, type system, placeholder parsing
 - `runtime.py`: Runtime `Wiring` class with `Accessor`/`AioAccessor`
 - `compiler.py`: Code generation via `WiringCompiler`
+- `merge.py`: Spec overlays via `merge_specs` (pure `Spec` -> `Spec`, applied before wiring)
 - `threads.py`: Thread safety mixins and utilities
 - `exceptions.py`: Custom exception classes
 - `constants.py`: Shared constants (placeholder patterns, delimiters)
