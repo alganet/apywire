@@ -51,7 +51,15 @@ def add_spdx_header(c_file):
 if os.path.exists("apywire/wiring.c"):
     os.remove("apywire/wiring.c")
 
-ext_modules = cythonize("apywire/wiring.py", force=True)
+# wiring.py holds no mutable module-level state: its globals are TypeAliases
+# and every mutable attribute is per-instance. Declaring Py_mod_gil as
+# NOT_USED keeps free-threaded interpreters from re-enabling the GIL
+# process-wide when apywire is imported.
+ext_modules = cythonize(
+    "apywire/wiring.py",
+    force=True,
+    compiler_directives={"freethreading_compatible": True},
+)
 
 # Add SPDX header to the generated .c file
 if os.path.exists("apywire/wiring.c"):

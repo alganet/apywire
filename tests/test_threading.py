@@ -8,7 +8,9 @@ These tests verify thread-safe instantiation, locking behavior, and
 concurrent access patterns.
 """
 
+import subprocess
 import sys
+import sysconfig
 import threading
 from types import ModuleType
 from typing import Awaitable, Protocol, cast
@@ -828,3 +830,35 @@ def test_optimistic_mode_cleanup() -> None:
     assert container._local.mode is None
     assert container._get_held_locks() == []
     assert result == "test"
+
+
+FREE_THREADED: bool = bool(
+    cast(object, sysconfig.get_config_var("Py_GIL_DISABLED"))
+)
+
+
+@pytest.mark.skipif(
+    not FREE_THREADED,
+    reason="requires a free-threaded (Py_GIL_DISABLED) build",
+)
+def test_import_does_not_reenable_the_gil() -> None:
+    """Importing apywire must leave free-threading on.
+
+    The Cython extension declares Py_mod_gil as NOT_USED. Without that
+    declaration a free-threaded interpreter re-enables the GIL for the
+    whole process the moment apywire.wiring is imported, silently
+    serializing every other thread in the host application.
+
+    Checked in a subprocess: by the time this test runs the module is
+    already imported, so an in-process assertion would observe the
+    damage as the status quo and pass.
+    """
+    probe = "import apywire, sys; print(sys._is_gil_enabled())"
+    result = subprocess.run(
+        [sys.executable, "-W", "error::RuntimeWarning", "-c", probe],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False", result.stderr
