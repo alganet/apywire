@@ -63,6 +63,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
     fmt: str = cast(str, args.format)
     aio: bool = cast(bool, args.aio)
     thread_safe: bool = cast(bool, args.thread_safe)
+    emit_spec: bool = cast(bool, args.emit_spec)
 
     content: str
     if input_file == "-":
@@ -92,7 +93,13 @@ def cmd_compile(args: argparse.Namespace) -> int:
         return 1
 
     compiler = WiringCompiler(spec)
-    code = compiler.compile(aio=aio, thread_safe=thread_safe)
+    try:
+        code = compiler.compile(
+            aio=aio, thread_safe=thread_safe, emit_spec=emit_spec
+        )
+    except ValueError as e:
+        print(f"Error compiling spec: {e}", file=sys.stderr)
+        return 1
     print(code)
     return 0
 
@@ -153,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
             "Examples:\n"
             "  apywire compile --format json config.json\n"
             "  apywire compile --format toml --aio config.toml > wiring.py\n"
+            "  apywire compile --format toml --emit-spec defaults.toml\n"
             "  cat spec.json | apywire compile --format json -"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -173,6 +181,11 @@ def main(argv: list[str] | None = None) -> int:
         "--thread-safe",
         action="store_true",
         help="Generate thread-safe accessors with locking",
+    )
+    compile_parser.add_argument(
+        "--emit-spec",
+        action="store_true",
+        help="Also emit the source spec as a module-level dict",
     )
     compile_parser.add_argument(
         "input_file",
