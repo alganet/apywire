@@ -73,7 +73,7 @@ day = "{now_day}"
 Compile a spec file to Python code.
 
 ```bash
-python -m apywire compile --format FORMAT [--aio] [--thread-safe] FILE
+python -m apywire compile --format FORMAT [--aio] [--thread-safe] [--emit-spec] FILE
 ```
 
 **Arguments:**
@@ -81,6 +81,7 @@ python -m apywire compile --format FORMAT [--aio] [--thread-safe] FILE
 - `--format FORMAT` - Input format: `ini`, `toml`, or `json` (required)
 - `--aio` - Generate async accessors using `run_in_executor`
 - `--thread-safe` - Generate thread-safe accessors with locking
+- `--emit-spec` - Also emit the source spec as a module-level dict
 - `FILE` - Input spec file path, or `-` to read from stdin
 
 **Examples:**
@@ -94,6 +95,9 @@ python -m apywire compile --format toml --aio config.toml > wiring.py
 
 # Compile with thread safety
 python -m apywire compile --format ini --thread-safe config.ini
+
+# Compile defaults that a user's config can later extend
+python -m apywire compile --format toml --emit-spec defaults.toml > _defaults.py
 
 # Read from stdin
 cat config.json | python -m apywire compile --format json -
@@ -249,8 +253,30 @@ You can combine both flags:
 python -m apywire compile --format json --aio --thread-safe config.json
 ```
 
+### --emit-spec
+
+Also emits the source spec as a module-level dict, so the compiled
+module is self-describing:
+
+```python
+import datetime
+
+spec = {'y': 2025, 'datetime.date d': {'year': '{y}'}}
+
+class Compiled:
+
+    def y(self):
+        return 2025
+    ...
+```
+
+Placeholders are emitted verbatim, so the spec can be overlaid with
+[`merge_specs`](merging.md) and wired again — which is how compiled
+defaults stay extensible by a user's config.
+
 ## Next Steps
 
 - **[Configuration Files](configuration-files.md)** - Loading specs from config files
+- **[Merging Specs](merging.md)** - Overlaying one spec on another
 - **[Compilation](compilation.md)** - Understanding the compiled output
 - **[Generator](generator.md)** - Python API for the generator

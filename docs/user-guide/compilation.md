@@ -89,13 +89,32 @@ code = compiler.compile(thread_safe=True)
 
 Generated code will use the same optimistic locking mechanism as runtime `Wiring`.
 
+### emit_spec (Emitting the Source Spec)
+
+Also emit the source spec as a module-level `spec` dict:
+
+```python
+code = compiler.compile(emit_spec=True)
+```
+
+A compiled container carries accessors, not data, so on its own it cannot
+be inspected or extended — and the source file it was built from is a
+build-time artifact that need not be installed at all. Emitting the spec
+makes the compiled module self-describing, so a user's config can be
+overlaid onto it at runtime with [`merge_specs`](merging.md#overlaying-compiled-defaults).
+
+Placeholders are emitted verbatim (`"{year}"` stays a string, rather than
+becoming an accessor call), so the emitted spec can be merged and wired
+again. It is off by default, and a spec holding values with no literal
+source representation cannot be emitted.
+
 ### Combined Options
 
 ```python
-code = compiler.compile(aio=True, thread_safe=True)
+code = compiler.compile(aio=True, thread_safe=True, emit_spec=True)
 ```
 
-Generates code with both async support and thread safety.
+Generates code with async support, thread safety and the source spec.
 
 ## Generated Code Structure
 

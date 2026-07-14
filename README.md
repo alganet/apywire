@@ -21,6 +21,7 @@ Lazy object wiring and dependency injection for Python 3.12+
 - 🔒 Thread Safety
 - 📦 Code Generation
 - 📄 Naturally Configurable
+- 🧩 Overlayable
 - 🎯 Zero Dependencies
 
 ## Installation
@@ -45,6 +46,16 @@ service = wired.service()  # Lazy instantiation + caching
 
 `spec` is a plain dictionary. It can be written in Python, or come from a
 [config file](docs/user-guide/configuration-files.md), apywire doesn't care.
+
+Specs [overlay](docs/user-guide/merging.md), so a library can ship defaults
+and a user's config can extend them instead of restating them:
+
+```python
+from apywire import merge_specs
+
+user = {"registry": {"+repos": ["{my_repo}"]}}  # append, don't replace
+wired = Wiring(merge_specs(defaults, user))
+```
 
 ## Documentation
 

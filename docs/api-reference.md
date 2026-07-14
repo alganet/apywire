@@ -32,6 +32,7 @@ Comprehensive API documentation for apywire.
       members:
         - __init__
         - compile
+        - spec
 
 ### WiringBase
 
@@ -115,6 +116,16 @@ entry: SpecEntry = {
 }
 ```
 
+## Functions
+
+### merge_specs
+
+::: apywire.merge_specs
+    options:
+      show_source: false
+
+Overlays specs onto a base spec; see [Merging Specs](user-guide/merging.md).
+
 ## Exception Classes
 
 ### WiringError
@@ -187,6 +198,27 @@ try:
 except LockUnavailableError as e:
     print(f"Could not acquire lock: {e}")
 ```
+
+### MergeError
+
+::: apywire.MergeError
+    options:
+      show_source: false
+
+Raised when two specs cannot be overlaid; see [Merging Specs](user-guide/merging.md):
+
+```python
+from apywire import MergeError, merge_specs
+
+try:
+    spec = merge_specs(defaults, user_config)
+except MergeError as e:
+    print(f"Could not merge config: {e}")
+```
+
+Unlike the errors above it is a `ValueError`, not a `WiringError` — a
+merge is a plain value operation, and routing it through an
+`AttributeError` would let a `hasattr` or `getattr` guard swallow it.
 
 ## Usage Examples
 
