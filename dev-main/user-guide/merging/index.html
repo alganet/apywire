@@ -1221,12 +1221,12 @@ assembled from several files.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">apywire</span><span class="w"> </span><span class="kn">import</span> <span class="n">Wiring</span><span class="p">,</span> <span class="n">merge_specs</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">defaults</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">&quot;delay&quot;</span><span class="p">:</span> <span class="mf">3.0</span><span class="p">,</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">&quot;pkg.Registry registry&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;repos&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;</span><span class="si">{repo_a}</span><span class="s2">&quot;</span><span class="p">],</span> <span class="s2">&quot;cache&quot;</span><span class="p">:</span> <span class="s2">&quot;/tmp&quot;</span><span class="p">},</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">"delay"</span><span class="p">:</span> <span class="mf">3.0</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">"pkg.Registry registry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"repos"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"</span><span class="si">{repo_a}</span><span class="s2">"</span><span class="p">],</span> <span class="s2">"cache"</span><span class="p">:</span> <span class="s2">"/tmp"</span><span class="p">},</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">}</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">user</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="s2">&quot;delay&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="s2">&quot;registry&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;+repos&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;</span><span class="si">{repo_b}</span><span class="s2">&quot;</span><span class="p">]},</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="s2">"delay"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="s2">"registry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"+repos"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"</span><span class="si">{repo_b}</span><span class="s2">"</span><span class="p">]},</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">}</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">wired</span> <span class="o">=</span> <span class="n">Wiring</span><span class="p">(</span><span class="n">merge_specs</span><span class="p">(</span><span class="n">defaults</span><span class="p">,</span> <span class="n">user</span><span class="p">))</span>
@@ -1248,10 +1248,10 @@ times over.</p>
 exposes <code>registry</code>). <strong>Entries are matched by the name</strong>, so an overlay
 can replace an entry with a different class:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">merge_specs</span><span class="p">(</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="p">{</span><span class="s2">&quot;pkg.Registry registry&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;cache&quot;</span><span class="p">:</span> <span class="s2">&quot;/tmp&quot;</span><span class="p">}},</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="p">{</span><span class="s2">&quot;mine.Registry registry&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;cache&quot;</span><span class="p">:</span> <span class="s2">&quot;/var&quot;</span><span class="p">}},</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="p">{</span><span class="s2">"pkg.Registry registry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"cache"</span><span class="p">:</span> <span class="s2">"/tmp"</span><span class="p">}},</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="p">{</span><span class="s2">"mine.Registry registry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"cache"</span><span class="p">:</span> <span class="s2">"/var"</span><span class="p">}},</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">)</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># {&#39;mine.Registry registry&#39;: {&#39;cache&#39;: &#39;/var&#39;}}</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># {'mine.Registry registry': {'cache': '/var'}}</span>
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Why not just <code>{**base, **overlay}</code>?</p>
@@ -1337,17 +1337,17 @@ demotion to a constant, which would drop the entry's class.</p>
 <h3 id="extending-an-entry-without-repeating-its-class-path">Extending an entry without repeating its class path<a class="headerlink" href="#extending-an-entry-without-repeating-its-class-path" title="Permanent link">&para;</a></h3>
 <p>A bare-name key extends the wired entry of that name, so a config need
 not repeat — and keep in sync with — the class path a library owns:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[registry]</span><span class="w">           </span><span class="c1"># extends the base&#39;s &quot;pkg.Registry registry&quot;</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">cache</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;/var&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[registry]</span><span class="w">           </span><span class="c1"># extends the base's "pkg.Registry registry"</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">cache</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"/var"</span>
 </code></pre></div>
 <h2 id="appending-to-a-list-the-marker">Appending to a list: the <code>+</code> marker<a class="headerlink" href="#appending-to-a-list-the-marker" title="Permanent link">&para;</a></h2>
 <p>A key prefixed with <code>+</code> appends to the base's list value for that key,
 instead of replacing it. In TOML, quote it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">[</span><span class="s2">&quot;mypkg.MdnRepo repo_mdn&quot;</span><span class="k">]</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">url_pattern</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;developer</span><span class="se">\\</span><span class="s2">.mozilla</span><span class="se">\\</span><span class="s2">.org/(.+)&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">[</span><span class="s2">"mypkg.MdnRepo repo_mdn"</span><span class="k">]</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">url_pattern</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"developer</span><span class="se">\\</span><span class="s2">.mozilla</span><span class="se">\\</span><span class="s2">.org/(.+)"</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="k">[registry]</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s2">&quot;+repos&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;{repo_mdn}&quot;</span><span class="p">]</span><span class="w">     </span><span class="c1"># the base&#39;s repos, then this one</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s2">"+repos"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"{repo_mdn}"</span><span class="p">]</span><span class="w">     </span><span class="c1"># the base's repos, then this one</span>
 </code></pre></div>
 <p>The marker is stripped during the merge and never reaches a container.
 It works at the top level too (<code>"+items" = [3]</code> on a constant list), and
@@ -1362,7 +1362,7 @@ through to a constructor as a literal key.</p>
 <p><code>+</code> only appends, and appends <strong>last</strong>. To drop an item from a base list,
 or to put yours ahead of the base's, restate the whole list:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[registry]</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">repos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;{repo_mdn}&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;{repo_archive}&quot;</span><span class="p">]</span><span class="w">   </span><span class="c1"># mine first; wiktionary dropped</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">repos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"{repo_mdn}"</span><span class="p">,</span><span class="w"> </span><span class="s2">"{repo_archive}"</span><span class="p">]</span><span class="w">   </span><span class="c1"># mine first; wiktionary dropped</span>
 </code></pre></div>
 <p>That re-couples your config to the base's list, which is what <code>+</code> exists
 to avoid — so prefer <code>+</code> when order and removal don't matter to you.</p>

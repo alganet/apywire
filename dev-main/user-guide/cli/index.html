@@ -1502,24 +1502,24 @@ SPDX-License-Identifier: ISC
 </ul>
 <p><strong>Examples:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Generate a spec for datetime.datetime</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="s2">&quot;datetime.datetime now&quot;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="s2">"datetime.datetime now"</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Generate TOML and save to file</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>config.toml
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span><span class="s2">"datetime.datetime now"</span><span class="w"> </span>&gt;<span class="w"> </span>config.toml
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Multiple entries</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">    </span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="s2">&quot;collections.OrderedDict config&quot;</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">    </span><span class="s2">"datetime.datetime now"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="s2">"collections.OrderedDict config"</span>
 </code></pre></div>
 <p><strong>Output:</strong></p>
 <p>The generator introspects the class constructor and creates placeholders for each parameter:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>$<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span><span class="s2">&quot;datetime.datetime now&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>$<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span><span class="s2">"datetime.datetime now"</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[</span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="k">]</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">year</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_year}&quot;</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_month}&quot;</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_day}&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[</span><span class="s2">"datetime.datetime now"</span><span class="k">]</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">year</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"{now_year}"</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"{now_month}"</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"{now_day}"</span>
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">...</span>
 </code></pre></div>
 <h3 id="compile">compile<a class="headerlink" href="#compile" title="Permanent link">&para;</a></h3>
@@ -1544,7 +1544,7 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Compile with thread safety</span>
 <a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>ini<span class="w"> </span>--thread-safe<span class="w"> </span>config.ini
 <a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># Compile defaults that a user&#39;s config can later extend</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># Compile defaults that a user's config can later extend</span>
 <a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>--emit-spec<span class="w"> </span>defaults.toml<span class="w"> </span>&gt;<span class="w"> </span>_defaults.py
 <a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>
 <a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="c1"># Read from stdin</span>
@@ -1557,7 +1557,7 @@ SPDX-License-Identifier: ISC
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">Compiled</span><span class="p">:</span>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">now</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_now&#39;</span><span class="p">):</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">'_now'</span><span class="p">):</span>
 <a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="n">year</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">now_year</span><span class="p">(),</span> <span class="o">...</span><span class="p">)</span>
 <a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_now</span>
 <a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
@@ -1582,7 +1582,7 @@ merges to. See <a href="../merging/">Merging Specs</a> for the semantics.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># What does my config actually change?</span>
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>merge<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>defaults.toml<span class="w"> </span>user.toml
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Overlay a user&#39;s config onto compiled defaults (see --emit-spec)</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Overlay a user's config onto compiled defaults (see --emit-spec)</span>
 <a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>merge<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>myapp._defaults:spec<span class="w"> </span>user.toml
 <a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
 <a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Merge TOML, read the result as JSON</span>
@@ -1595,7 +1595,7 @@ base a user's config is overlaid onto.</p>
 <h2 id="full-workflow">Full Workflow<a class="headerlink" href="#full-workflow" title="Permanent link">&para;</a></h2>
 <p>A typical workflow combines generate and compile:</p>
 <h3 id="1-generate-a-spec">1. Generate a Spec<a class="headerlink" href="#1-generate-a-spec" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>config.toml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span><span class="s2">"datetime.datetime now"</span><span class="w"> </span>&gt;<span class="w"> </span>config.toml
 </code></pre></div>
 <h3 id="2-customize-the-spec">2. Customize the Spec<a class="headerlink" href="#2-customize-the-spec" title="Permanent link">&para;</a></h3>
 <p>Edit <code>config.toml</code> with your values:</p>
@@ -1603,10 +1603,10 @@ base a user's config is overlaid onto.</p>
 <a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">now_month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span>
 <a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">now_day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">15</span>
 <a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">[</span><span class="s2">&quot;datetime.datetime now&quot;</span><span class="k">]</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="n">year</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_year}&quot;</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="n">month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_month}&quot;</span>
-<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="n">day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{now_day}&quot;</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">[</span><span class="s2">"datetime.datetime now"</span><span class="k">]</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="n">year</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"{now_year}"</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="n">month</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"{now_month}"</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="n">day</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"{now_day}"</span>
 </code></pre></div>
 <h3 id="3-compile-to-python">3. Compile to Python<a class="headerlink" href="#3-compile-to-python" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>toml<span class="w"> </span>config.toml<span class="w"> </span>&gt;<span class="w"> </span>wiring.py
@@ -1615,27 +1615,27 @@ base a user's config is overlaid onto.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">wiring</span><span class="w"> </span><span class="kn">import</span> <span class="n">compiled</span>
 <a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
 <a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="n">dt</span> <span class="o">=</span> <span class="n">compiled</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Date: </span><span class="si">{</span><span class="n">dt</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Date: 2025-06-15 00:00:00</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Date: </span><span class="si">{</span><span class="n">dt</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>  <span class="c1"># Date: 2025-06-15 00:00:00</span>
 </code></pre></div>
 <h2 id="pipeline-usage">Pipeline Usage<a class="headerlink" href="#pipeline-usage" title="Permanent link">&para;</a></h2>
 <p>You can pipe generate output directly to compile:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Generate and compile in one command</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="s2">&quot;collections.OrderedDict cfg&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>generate<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="s2">"collections.OrderedDict cfg"</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>apywire<span class="w"> </span>compile<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>-
 </code></pre></div>
 <h2 id="format-reference">Format Reference<a class="headerlink" href="#format-reference" title="Permanent link">&para;</a></h2>
 <h3 id="json">JSON<a class="headerlink" href="#json" title="Permanent link">&para;</a></h3>
 <p>Direct mapping—no special handling needed:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="nt">&quot;collections.OrderedDict config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
-<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">  </span><span class="nt">&quot;max_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="nt">"collections.OrderedDict config"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">  </span><span class="nt">"max_size"</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span>
 <a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="p">}</span>
 </code></pre></div>
 <h3 id="toml">TOML<a class="headerlink" href="#toml" title="Permanent link">&para;</a></h3>
 <p>Top-level keys are constants, tables are wiring entries:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="n">max_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span>
 <a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="k">[</span><span class="s2">&quot;collections.OrderedDict config&quot;</span><span class="k">]</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="k">[</span><span class="s2">"collections.OrderedDict config"</span><span class="k">]</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Quoted Section Names</p>
@@ -1656,7 +1656,7 @@ base a user's config is overlaid onto.</p>
 <a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
 <a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Compiled</span><span class="p">:</span>
 <a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">now</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_now&#39;</span><span class="p">):</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">'_now'</span><span class="p">):</span>
 <a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 <a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_now</span>
 <a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>
@@ -1672,8 +1672,8 @@ base a user's config is overlaid onto.</p>
 <a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_init_thread_safety</span><span class="p">()</span>
 <a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>
 <a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">now</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_now&#39;</span><span class="p">):</span>
-<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_now</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instantiate_attr</span><span class="p">(</span><span class="s1">&#39;now&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">'_now'</span><span class="p">):</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_now</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instantiate_attr</span><span class="p">(</span><span class="s1">'now'</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
 <a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_now</span>
 </code></pre></div>
 <p>You can combine both flags:</p>
@@ -1683,12 +1683,12 @@ base a user's config is overlaid onto.</p>
 <p>Also emits the source spec as a module-level dict, so the compiled
 module is self-describing:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
-<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">spec</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="mi">2025</span><span class="p">,</span> <span class="s1">&#39;datetime.date d&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;year&#39;</span><span class="p">:</span> <span class="s1">&#39;</span><span class="si">{y}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="s1">&#39;month&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;day&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}}</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">spec</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'y'</span><span class="p">:</span> <span class="mi">2025</span><span class="p">,</span> <span class="s1">'datetime.date d'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'year'</span><span class="p">:</span> <span class="s1">'</span><span class="si">{y}</span><span class="s1">'</span><span class="p">,</span> <span class="s1">'month'</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">'day'</span><span class="p">:</span> <span class="mi">1</span><span class="p">}}</span>
 <a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>
 <a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Compiled</span><span class="p">:</span>
 <a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>
 <a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">d</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_d&#39;</span><span class="p">):</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">'_d'</span><span class="p">):</span>
 <a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_d</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">year</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">(),</span> <span class="n">month</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_d</span>
 <a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a>

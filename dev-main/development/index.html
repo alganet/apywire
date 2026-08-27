@@ -1866,7 +1866,7 @@ SPDX-License-Identifier: ISC
 <ul>
 <li><strong>Compiled Code Testing</strong>: When testing compiled code, use the pre-instantiated <code>compiled</code> object from the execution namespace instead of manually instantiating the class.
   <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">execd</span><span class="p">)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">wired</span> <span class="o">=</span> <span class="n">execd</span><span class="p">[</span><span class="s2">&quot;compiled&quot;</span><span class="p">]</span>  <span class="c1"># Use this instance</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">wired</span> <span class="o">=</span> <span class="n">execd</span><span class="p">[</span><span class="s2">"compiled"</span><span class="p">]</span>  <span class="c1"># Use this instance</span>
 </code></pre></div></li>
 <li><strong>Type Safety in Tests</strong>: Avoid <code>Any</code> and <code>type: ignore</code>. Use <code>typing.Protocol</code> to define the expected interface of dynamic or compiled objects.
   <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">MockConfig</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
@@ -1879,11 +1879,11 @@ SPDX-License-Identifier: ISC
 <li><strong>Naming</strong>: Use descriptive test names: <code>test_&lt;feature&gt;_&lt;scenario&gt;_&lt;expected_behavior&gt;()</code>.</li>
 <li><strong>Module Mocking</strong>: When testing custom classes, inject them into <code>sys.modules</code> using a <code>try...finally</code> block to ensure cleanup.
   <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">MockModule</span><span class="p">(</span><span class="n">ModuleType</span><span class="p">):</span> <span class="o">...</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">&quot;mymod&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">MockModule</span><span class="p">()</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">"mymod"</span><span class="p">]</span> <span class="o">=</span> <span class="n">MockModule</span><span class="p">()</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">try</span><span class="p">:</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="c1"># test code</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">finally</span><span class="p">:</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="k">del</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">&quot;mymod&quot;</span><span class="p">]</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="k">del</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">"mymod"</span><span class="p">]</span>
 </code></pre></div></li>
 </ul>
 <h3 id="code-formatting">Code Formatting<a class="headerlink" href="#code-formatting" title="Permanent link">&para;</a></h3>
@@ -2001,15 +2001,15 @@ SPDX-License-Identifier: ISC
 <h4 id="placeholder-resolution">Placeholder Resolution<a class="headerlink" href="#placeholder-resolution" title="Permanent link">&para;</a></h4>
 <p>Strings like <code>{name}</code> are converted to <code>_WiredRef</code> markers during parsing, and <code>{aio.name}</code> to <code>_AioWiredRef</code> markers:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">_WiredRef</span><span class="p">:</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,)</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"name"</span><span class="p">,)</span>
 <a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
 <a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">_AioWiredRef</span><span class="p">:</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,)</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"name"</span><span class="p">,)</span>
 <a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
 <a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">_resolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
 <a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_placeholder</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
 <a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>        <span class="n">ref_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_placeholder_name</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>        <span class="k">if</span> <span class="n">ref_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;aio.&quot;</span><span class="p">):</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>        <span class="k">if</span> <span class="n">ref_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"aio."</span><span class="p">):</span>
 <a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>            <span class="k">return</span> <span class="n">_AioWiredRef</span><span class="p">(</span><span class="n">ref_name</span><span class="p">[</span><span class="mi">4</span><span class="p">:])</span>
 <a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>        <span class="k">return</span> <span class="n">_WiredRef</span><span class="p">(</span><span class="n">ref_name</span><span class="p">)</span>
 <a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>    <span class="k">return</span> <span class="n">obj</span>
@@ -2052,7 +2052,7 @@ SPDX-License-Identifier: ISC
 <h3 id="writing-tests">Writing Tests<a class="headerlink" href="#writing-tests" title="Permanent link">&para;</a></h3>
 <p>Test naming convention:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_</span><span class="o">&lt;</span><span class="n">feature</span><span class="o">&gt;</span><span class="n">_</span><span class="o">&lt;</span><span class="n">scenario</span><span class="o">&gt;</span><span class="n">_</span><span class="o">&lt;</span><span class="n">expected_behavior</span><span class="o">&gt;</span><span class="p">():</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Brief description of what is being tested.&quot;&quot;&quot;</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">    </span><span class="sd">"""Brief description of what is being tested."""</span>
 <a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>    <span class="c1"># Arrange</span>
 <a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="n">spec</span> <span class="o">=</span> <span class="p">{</span><span class="o">...</span><span class="p">}</span>
 <a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>
@@ -2112,7 +2112,7 @@ SPDX-License-Identifier: ISC
 </li>
 <li>
 <p><strong>Commit changes</strong> with descriptive messages:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Add feature X to handle Y&quot;</span>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"Add feature X to handle Y"</span>
 </code></pre></div></p>
 </li>
 <li>
